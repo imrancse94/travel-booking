@@ -1,0 +1,149 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required for AWS OIDC
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+  ECR_REPOSITORY_BACKEND: ${{ vars.ECR_REPOSITORY_BACKEND }}
+  ECR_REPOSITORY_FRONTEND: ${{ vars.ECR_REPOSITORY_FRONTEND }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+  ECS_SERVICE_BACKEND: ${{ vars.ECS_SERVICE_BACKEND }}
+  ECS_SERVICE_FRONTEND: ${{ vars.ECS_SERVICE_FRONTEND }}
+  ECS_SUBNETS: ${{ vars.ECS_SUBNETS }}
+  ECS_SECURITY_GROUP: ${{ vars.ECS_SECURITY_GROUP }}
+  HEALTH_CHECK_URL: ${{ vars.HEALTH_CHECK_URL }}
+
+jobs:
+  build-and-push:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: tag
+        run: echo "image_tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        run: |
+          docker build --target production \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:${{ steps.tag.outputs.image_tag }}" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest" \
+            ./backend
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:${{ steps.tag.outputs.image_tag }}"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest"
+
+      - name: Build and push frontend image
+        run: |
+          docker build --target production \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:${{ steps.tag.outputs.image_tag }}" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest" \
+            ./frontend
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:${{ steps.tag.outputs.image_tag }}"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest"
+
+  migrate:
+    name: Run database migrations
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Migrations are applied as a one-off ECS task running the just-built
+      # backend image with its command overridden to `prisma migrate deploy`,
+      # BEFORE the ECS services are updated. This is deliberate: the schema
+      # must already match what the new backend code expects before any task
+      # running that code starts receiving traffic. Prisma migrations in this
+      # project are additive/backward-compatible by convention (see
+      # documentation/database.md), so the previous task definition's
+      # still-running tasks remain compatible during the rollover window.
+      - name: Run "prisma migrate deploy" as a one-off ECS task
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition "${{ vars.ECS_TASK_DEFINITION_BACKEND }}" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$ECS_SUBNETS],securityGroups=[$ECS_SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"backend","command":["npx","prisma","migrate","deploy"]}]}' \
+            --query 'tasks[0].taskArn' --output text)
+          echo "Migration task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration task failed with exit code $EXIT_CODE"
+            aws logs tail "/ecs/${{ vars.ECS_TASK_DEFINITION_BACKEND }}" --since 10m || true
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy ECS services
+    runs-on: ubuntu-latest
+    needs: migrate
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy backend service
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE_BACKEND" \
+            --force-new-deployment
+
+      - name: Deploy frontend service
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE_FRONTEND" \
+            --force-new-deployment
+
+      - name: Wait for services to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_BACKEND" "$ECS_SERVICE_FRONTEND"
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 10); do
+            if curl --fail --silent --show-error "$HEALTH_CHECK_URL"; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Health check attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check did not pass after deployment"
+          exit 1

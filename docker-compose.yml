@@ -1,0 +1,123 @@
+name: travel-booking
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: booking_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-booking_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-booking_password}
+      POSTGRES_DB: ${POSTGRES_DB:-booking_db}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-booking_user} -d ${POSTGRES_DB:-booking_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - booking_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: booking_redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - booking_network
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: booking_mailpit
+    restart: unless-stopped
+    ports:
+      - '8026:8025' # web UI: view every email the app sends, at http://localhost:8026
+      # SMTP (1025) is intentionally NOT published to the host -- only the
+      # backend container needs it, over the internal booking_network.
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:8025/']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - booking_network
+
+  backend:
+    build:
+      context: ./backend
+      target: development
+    container_name: booking_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-booking_user}:${POSTGRES_PASSWORD:-booking_password}@postgres:5432/${POSTGRES_DB:-booking_db}?schema=public
+      REDIS_URL: redis://redis:6379
+      EMAIL_PROVIDER: smtp
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+    ports:
+      - '4000:4000'
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+      - ./backend/seeds:/app/seeds
+      - ./backend/tests:/app/tests
+      - ./backend/logs:/app/logs
+      - backend_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+    networks:
+      - booking_network
+
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    container_name: booking_frontend
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - booking_network
+
+networks:
+  booking_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_node_modules:
+  frontend_node_modules:

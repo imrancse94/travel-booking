@@ -1,0 +1,57 @@
+import { Router } from 'express';
+
+import { router as healthRoutes } from './health.routes.js';
+import { router as authRoutes } from './auth.routes.js';
+import { router as userRoutes } from './users.routes.js';
+import { router as roleRoutes } from './roles.routes.js';
+import { router as hotelRoutes } from './hotels.routes.js';
+import { router as roomTypeRoutes } from './roomTypes.routes.js';
+import { router as roomRoutes } from './rooms.routes.js';
+import { router as amenityRoutes } from './amenities.routes.js';
+import { router as ratePlanRoutes } from './ratePlans.routes.js';
+import { router as availabilityRoutes } from './availability.routes.js';
+import { router as bookingRoutes } from './bookings.routes.js';
+import { router as customerRoutes } from './customers.routes.js';
+import { router as serviceRoutes } from './services.routes.js';
+import { router as paymentRoutes } from './payments.routes.js';
+import { router as refundRoutes } from './refunds.routes.js';
+import { router as invoiceRoutes } from './invoices.routes.js';
+import { router as destinationRoutes } from './destinations.routes.js';
+import { router as tourRoutes } from './tours.routes.js';
+import { router as transportRoutes } from './transport.routes.js';
+import { router as commissionRoutes } from './commissions.routes.js';
+import { router as reportRoutes } from './reports.routes.js';
+import { router as dashboardRoutes } from './dashboard.routes.js';
+import { router as notificationRoutes } from './notifications.routes.js';
+import { router as settingRoutes } from './settings.routes.js';
+import { router as uploadRoutes } from './uploads.routes.js';
+
+export const router = Router();
+
+router.use('/health', healthRoutes);
+router.use('/auth', authRoutes);
+router.use('/users', userRoutes);
+router.use('/roles', roleRoutes);
+router.use('/hotels', hotelRoutes);
+router.use('/room-types', roomTypeRoutes);
+router.use('/rooms/availability', availabilityRoutes);
+router.use('/rooms', roomRoutes);
+router.use('/amenities', amenityRoutes);
+router.use('/rate-plans', ratePlanRoutes);
+router.use('/bookings', bookingRoutes);
+router.use('/customers', customerRoutes);
+router.use('/services', serviceRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/refunds', refundRoutes);
+router.use('/invoices', invoiceRoutes);
+router.use('/destinations', destinationRoutes);
+router.use('/tours', tourRoutes);
+router.use('/transport', transportRoutes);
+router.use('/commissions', commissionRoutes);
+router.use('/reports', reportRoutes);
+router.use('/dashboard', dashboardRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/settings', settingRoutes);
+router.use('/uploads', uploadRoutes);
+
+export default router;

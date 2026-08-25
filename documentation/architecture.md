@@ -1,0 +1,195 @@
+# Architecture
+
+## 1. Overview
+
+The system is a Travel Agency + Hotel Booking Management System composed of two independently deployable applications sharing one PostgreSQL database:
+
+- **backend** — a REST API (Node.js + Express) that owns all business logic, data access, authentication, and background jobs.
+- **frontend** — a React single-page application (admin console + customer-facing booking site) that talks to the backend exclusively over HTTP.
+
+Both applications live in one repository so they can be versioned, tested, and deployed together, but they do not share code or a runtime process.
+
+```
+Browser (admin / customer)
+        |
+        v
+   frontend (React + Vite, served by nginx in production)
+        |  HTTPS, /api/v1/*
+        v
+   backend (Express API)
+        |
+        +--> PostgreSQL (system of record)
+        +--> Redis (cache / rate limiting support)
+        +--> SMTP / console (email)
+        +--> S3 / local disk (file storage)
+        +--> payment gateway adapter (mock in dev)
+```
+
+## 2. Technology stack
+
+**Backend**
+- Node.js 20 LTS, plain JavaScript (ES Modules, no TypeScript, no build step — `node --watch` in dev, `node src/server.js` in production)
+- Express 4 for HTTP routing and middleware
+- Prisma ORM (`@prisma/client` + `prisma` CLI) against PostgreSQL — the single chosen data-access layer for the whole project (per the "choose one ORM" instruction)
+- Redis via `ioredis`, wrapped by `RedisClient`
+- `zod` for request validation, `jsonwebtoken` for JWT, `bcrypt` for password hashing, `pino`/`pino-http` for structured logging, `swagger-jsdoc` + `swagger-ui-express` for API docs, `pdfkit` for invoice PDFs, `multer` for uploads, `aws-sdk` for S3, `nodemailer` for SMTP
+- Jest + Supertest for backend tests
+
+**Frontend**
+- React 18, plain JavaScript (no TypeScript)
+- Vite for dev server and production build
+- React Router for client-side routing
+- Axios (wrapped by `ApiClient`) for HTTP calls
+- Vitest + Testing Library for tests
+
+**Database**
+- PostgreSQL 16, accessed only through Prisma. Migrations are generated and applied with `prisma migrate`.
+
+**Infrastructure**
+- Docker multi-stage builds for both apps, Docker Compose for local development
+- GitHub Actions for CI and CD
+- AWS (ECR, ECS/Fargate, ALB, RDS, ElastiCache, S3, CloudWatch, Route 53) for production — see `deployment.md`
+
+## 3. Backend layered architecture
+
+Every request flows through a fixed sequence of layers. Business logic is never placed directly in a controller or a route file:
+
+```
+Route            defines the URL/method and wires middleware (routes/*.routes.js)
+  -> Middleware  cross-cutting concerns: auth, RBAC, validation, rate limiting
+  -> Controller  translates HTTP <-> service calls, no business logic (controllers/*.js)
+  -> Service     business rules, transactions, orchestration (services/*.js)
+  -> Repository  data access for the handful of domains that warrant one on top of Prisma (repositories/*.js)
+  -> Database    PostgreSQL via Prisma Client
+```
+
+Notes on how this is applied in practice:
+
+- **Route** files (`src/routes/*.routes.js`) only declare `router.get/post/put/delete(...)` and attach the middleware chain (`authenticate`, `requirePermission(...)`, `validate({...})`). They are mounted under a common prefix in `src/routes/index.js`.
+- **Middleware** (`src/middleware/`) handles authentication (`auth.js`), authorization (`rbac.js`), input validation (`validate.js`, backed by `zod` schemas in `src/validators/`), rate limiting (`rateLimiter.js`), request logging (`requestLogger.js`), and centralized error translation (`errorHandler.js`).
+- **Controller** functions (`src/controllers/*.js`) parse `req`, call one or more service functions, and shape the HTTP response using the shared envelope helpers in `src/utils/apiResponse.js`.
+- **Service** functions (`src/services/*.js`) contain the actual business rules — availability checks, pricing, booking state transitions, settings resolution, auditing — and are the only layer allowed to open a Prisma transaction. Services are plain functions, not classes, and are unit-testable independent of Express.
+- **Repository** functions (`src/repositories/*.js`) exist for the domains where isolating raw Prisma queries behind a narrow function set is worth it (currently `bookingRepository.js`, `userRepository.js`); simpler CRUD domains query Prisma directly from their service.
+- **Database** access always goes through the shared Prisma client (`src/config/prisma.js`); no module outside `config/` and the services/repositories layer touches Prisma directly.
+
+Cross-cutting infrastructure required by section 4 of the original spec is all present: Helmet, CORS (env-configured allow-list), `express-rate-limit`, centralized error handling (`AppError` subclasses + `errorHandler.js`), graceful shutdown on `SIGTERM`/`SIGINT` in `server.js`, and structured logging via the `Logger` wrapper around `pino`.
+
+## 4. The `lib/` wrapper-class convention
+
+Every external npm package that talks to the outside world or provides a cross-cutting capability is wrapped in a small class under `backend/src/lib/<Name>.js` (and the equivalent `frontend/src/lib/ApiClient.js` on the frontend):
+
+| Wrapper | Wraps | Location |
+|---|---|---|
+| `BcryptHasher` | `bcrypt` | `backend/src/lib/BcryptHasher.js` |
+| `JwtService` | `jsonwebtoken` | `backend/src/lib/JwtService.js` |
+| `RedisClient` | `ioredis` | `backend/src/lib/RedisClient.js` |
+| `MailTransport` | `nodemailer` | `backend/src/lib/MailTransport.js` |
+| `Logger` | `pino` | `backend/src/lib/Logger.js` |
+| `ApiClient` | `axios` | `frontend/src/lib/ApiClient.js` |
+
+The rest of the application imports and depends only on these wrapper classes — never on `bcrypt`, `jsonwebtoken`, `ioredis`, `nodemailer`, `pino`, or `axios` directly (the only sanctioned exception is the wrapper file itself, plus rare direct interop needs such as handing `pino-http` the raw `pino` instance via `Logger.raw`). Additional libraries brought in by other route/feature modules as they are implemented (e.g. `pdfkit` for invoice generation, `multer` for uploads, `aws-sdk` for S3) are expected to follow the same pattern and get their own `lib/PdfGenerator.js`, `lib/UploadHandler.js`, `lib/S3Client.js`, etc.
+
+Why this convention exists:
+
+1. **Swappability** — replacing `bcrypt` with `argon2`, or `nodemailer` with a different transport, or `axios` with `fetch`, means editing one file instead of hunting down every call site across the codebase.
+2. **Single point of change** — cross-cutting concerns (retry policy, logging, default options, error normalization) are configured once, in the wrapper's constructor/methods, instead of being duplicated at every call site.
+3. **Easier testing** — application code depends on a small class with a handful of methods, which is trivial to mock in unit tests, instead of mocking a large third-party API surface.
+
+## 5. RBAC model
+
+Authorization is modeled as a classic many-to-many graph, stored in PostgreSQL and evaluated on every authenticated request:
+
+```
+User --(user_roles)--> Role --(role_permissions)--> Permission
+```
+
+- `roles` — the 7 fixed roles: Super Admin, Agency Admin, Hotel Admin, Booking Agent, Accountant, Tour Manager, Customer (see `backend/src/config/permissions.js`, `ROLES`).
+- `permissions` — a flat, granular list such as `bookings.create`, `hotels.update`, `payments.refund` (see `PERMISSIONS` in the same file).
+- `user_roles` — join table, a user can hold more than one role.
+- `role_permissions` — join table, a role can hold many permissions.
+
+At login, the backend resolves a user's roles and the union of their permissions and attaches both to `req.user`. Route guards use `requirePermission('bookings.create')` (or an array, matched with OR semantics) from `middleware/rbac.js`. **Super Admin is a special case: it bypasses every permission check** (`requirePermission` returns `next()` immediately if `req.user.roles.includes('Super Admin')`), rather than being granted every permission row explicitly — this keeps Super Admin correct even as new permissions are added later without a seed/migration to update its grant set. Every other role's default permission set is seeded from `ROLE_PERMISSIONS` in `permissions.js` (see `database.md` and `backend/seeds/index.js`).
+
+## 6. Notification / email / payment provider abstractions
+
+Following the "never hard-code an external provider" rule, three integration points are built as small pluggable adapters under `backend/src/integrations/`, each selected by an environment variable so the system stays fully runnable in local development with zero external accounts:
+
+- **Email** (`integrations/email/providers/`) — `consoleProvider.js` (default in development: logs the email instead of sending it) and `smtpProvider.js` (real SMTP via the `MailTransport` wrapper), selected by `EMAIL_PROVIDER=console|smtp`. Templates live in `integrations/email/emailTemplates.js` and are rendered by `services/emailService.js`.
+- **SMS / WhatsApp** (`integrations/sms/smsProvider.js`, `integrations/whatsapp/whatsappProvider.js`) — currently a no-op stub gated by `SMS_PROVIDER=none` / `WHATSAPP_PROVIDER=none` that logs and returns `{ skipped: true }`; wiring in Twilio, Vonage, or a local gateway later is a one-file change with the same function shape.
+- **Payment gateway** (`integrations/payment/paymentGateway.js`) — `resolvePaymentGateway(name)` returns an adapter shaped `{ name, async charge({ amount, currency, method, metadata }) }`. Only `mock` (`providers/mockGateway.js`) is implemented today; `stripe`/`paypal` are reserved switch cases that throw a clear "not implemented yet" error until a real adapter is added, selected by `PAYMENT_GATEWAY=mock|stripe|paypal`.
+- **Notifications** (`notifications/notificationService.js`) — `notify(...)` is the single fan-out point for every business event (booking created, cancelled, etc.): it always writes an in-app `Notification` row, and optionally sends an email when an `emailTemplate` is supplied. SMS/WhatsApp dispatch (`notifySms`, `notifyWhatsapp`) is wired through the same module for a consistent call shape once those providers exist.
+
+All four abstractions share the same shape: a small resolver function keyed off an environment variable, a development-safe default that requires no external account, and a documented extension point for a real provider.
+
+## 7. Folder structure
+
+The repository intentionally uses **lowercase** `backend/` and `frontend/` as its two top-level application folders — this differs from the capitalized `Backend/`/`Frontend/` shown in the original project brief, and was an explicit, deliberate project decision (lowercase is the Node/JS ecosystem convention and matches every import path, Docker build context, and CI working-directory in this repo). Everything else follows the brief's structure:
+
+```
+/
+├── backend/
+│   ├── src/
+│   │   ├── config/        # env, prisma client, redis client, logger, swagger, permissions
+│   │   ├── controllers/   # HTTP <-> service glue, no business logic
+│   │   ├── middleware/    # auth, rbac, validate, rateLimiter, requestLogger, errorHandler
+│   │   ├── models/        # reserved for non-Prisma model helpers
+│   │   ├── repositories/  # narrow data-access modules on top of Prisma
+│   │   ├── routes/        # one *.routes.js per resource, mounted in routes/index.js
+│   │   ├── services/      # business logic and transactions
+│   │   ├── validators/    # zod schemas
+│   │   ├── utils/         # errors, money, pagination, apiResponse, bookingNumber, asyncHandler
+│   │   ├── jobs/           # background jobs (hold-expiry sweeper)
+│   │   ├── integrations/  # pluggable external providers (email/sms/whatsapp/payment)
+│   │   ├── notifications/ # notification fan-out service
+│   │   ├── lib/            # wrapper classes around every external npm library
+│   │   ├── app.js
+│   │   └── server.js
+│   ├── prisma/            # schema.prisma + migrations/
+│   ├── migrations/         # reserved (Prisma migrations live under prisma/migrations)
+│   ├── seeds/              # database seed script
+│   ├── tests/              # unit/ and integration/
+│   ├── Dockerfile
+│   ├── package.json
+│   └── .env.example
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/    # reusable UI primitives (buttons, tables, modals, ...)
+│   │   ├── layouts/       # admin shell, customer shell
+│   │   ├── pages/         # route-level page components
+│   │   ├── features/      # feature-based modules (bookings, hotels, ...)
+│   │   ├── routes/        # React Router route trees + protected route guards
+│   │   ├── services/      # API call modules built on lib/ApiClient
+│   │   ├── hooks/
+│   │   ├── contexts/      # auth context, etc.
+│   │   ├── utils/
+│   │   ├── constants/
+│   │   ├── assets/
+│   │   ├── styles/
+│   │   ├── lib/            # ApiClient wrapper around axios
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── public/
+│   ├── Dockerfile
+│   ├── package.json
+│   └── .env.example
+│
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       └── deploy.yml
+│
+├── documentation/
+│   ├── architecture.md
+│   ├── database.md
+│   ├── api.md
+│   ├── booking-flow.md
+│   ├── development.md
+│   └── deployment.md
+│
+├── docker-compose.yml
+├── .gitignore
+└── README.md
+```
+
+No extra top-level folders (`database/`, `server/`, `client/`, `api/`, `infra/`, `devops/`) exist — infrastructure configuration stays at the repo root or under `.github/`, exactly as required.

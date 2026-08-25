@@ -1,0 +1,72 @@
+/* Shared centered-card chrome for the standalone auth pages (login, register,
+   forgot/reset password) -- these intentionally render outside CustomerLayout. */
+
+.auth-page {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) var(--space-4);
+  background: var(--color-bg);
+}
+
+.auth-page__card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-page__brand {
+  display: block;
+  text-align: center;
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: var(--color-text);
+  text-decoration: none;
+  margin-bottom: var(--space-5);
+}
+
+.auth-page__title {
+  margin: 0 0 var(--space-1);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.auth-page__subtitle {
+  margin: 0 0 var(--space-5);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+}
+
+.auth-page__error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: var(--color-danger);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  font-size: 0.86rem;
+  margin-bottom: var(--space-4);
+}
+
+.auth-page__success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: var(--color-success);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  font-size: 0.86rem;
+  margin-bottom: var(--space-4);
+}
+
+.auth-page__footer {
+  margin-top: var(--space-4);
+  text-align: center;
+  font-size: 0.86rem;
+  color: var(--color-text-muted);
+}
+
+.auth-page__submit {
+  width: 100%;
+  margin-top: var(--space-2);
+}
