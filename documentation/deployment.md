@@ -29,30 +29,73 @@ Container images for both services are built and stored in ECR.
 - **S3** replaces local-disk file storage in production (`FILE_STORAGE_DRIVER=s3`, see `architecture.md`'s file-upload abstraction) for hotel/room images, customer/passport documents, and generated invoice PDFs.
 - **CloudWatch** receives structured logs from both services (the `awslogs` log driver on each ECS task definition; the backend already logs as structured JSON via the `Logger`/`pino` wrapper, which CloudWatch Logs Insights can query directly).
 
-## 2. How `.github/workflows/deploy.yml` gets there
+## 2. Continuous integration
 
-The deploy workflow runs on push to `main` (and supports manual `workflow_dispatch`) and performs, in order:
+Three workflows run in `.github/workflows/`:
 
-1. **Checkout** the repository.
-2. **Authenticate to AWS via OIDC** (`aws-actions/configure-aws-credentials`, `role-to-assume: ${{ secrets.AWS_ROLE_ARN }}`) — no long-lived AWS access keys are stored in GitHub at all; the workflow assumes a role trusted for GitHub's OIDC provider, scoped to this repository, for the duration of the job only.
-3. **Log in to ECR** (`aws-actions/amazon-ecr-login`).
-4. **Build and push both images**, each tagged with the commit SHA (and `latest`):
-   - `docker build --target production -t $ECR_REGISTRY/travel-booking-backend:$GITHUB_SHA ./backend`
-   - `docker build --target production -t $ECR_REGISTRY/travel-booking-frontend:$GITHUB_SHA ./frontend`
-   - both pushed to their ECR repositories.
-5. **Run database migrations as a one-off ECS task**, *before* the new backend task definition is rolled out to receive live traffic: `aws ecs run-task` launches the just-pushed backend image with its command overridden to `npx prisma migrate deploy`, using the same network configuration (VPC subnets/security group) as the real service so it can reach RDS, then the workflow polls until that task exits and fails the deploy if it exits non-zero. Migrations are run **before** flipping traffic (rather than after) so that a new backend version never receives requests against a schema it doesn't expect — Prisma migrations in this schema are additive/backward-compatible by convention (see `database.md` section 5), which keeps the previous task definition's still-running tasks compatible with the post-migration schema during the rollover window.
-6. **Update both ECS services** with the new image — either a direct `aws ecs update-service --force-new-deployment` after registering a new task definition revision, or `aws-actions/amazon-ecs-deploy-task-definition` to render the task definition from a template and register/deploy it in one step.
-7. **Wait for stability**: `aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_BACKEND_SERVICE $ECS_FRONTEND_SERVICE`, which blocks until ECS reports the desired count of healthy, running tasks for both services (or times out, failing the job).
-8. **Health check**: a final `curl --fail` against the ALB's public health endpoint (`https://<domain>/api/v1/health`) confirms the new deployment is actually serving traffic before the job is considered successful.
+| Workflow | Trigger | What it proves |
+|---|---|---|
+| `ci.yml` | push/PR to `main` | Each package on its own: ESLint, backend Jest/Supertest against service containers, frontend Vitest, the Vite production bundle, and the backend production image build. |
+| `docker-compose-ci.yml` | push/PR to `main`, manual | The stack we actually ship: `docker compose build` + `up --wait`, `prisma migrate status`, seeding (twice, proving idempotence), both test suites *inside* the containers, and an end-to-end smoke test through HTTP. Also builds both `production` image stages and boots the frontend one to confirm nginx serves the bundle. |
+| `deploy.yml` | push to `main`, manual | Section 3 below. |
 
-## 3. Required GitHub repository secrets/variables
+`docker-compose-ci.yml` runs `.github/scripts/smoke.sh`, which is the same
+script `make smoke` runs locally: ~60 assertions over health endpoints, login
+and rejected credentials, RBAC (401/403/200 for the same routes across roles),
+availability search and its date validation, booking creation with a
+server-calculated total, **double-booking prevention** (a second booking of the
+same room over the same dates must be a 409), payment → confirmation, invoice
+generation and PDF rendering, cancellation releasing the room, and every
+report/export/dashboard endpoint. On failure the job dumps and uploads
+`docker compose logs`, then always tears the stack down with `down -v`.
+
+Because the smoke test only needs `curl` + `python3` and takes its base URLs
+from `API_URL`/`WEB_URL`, the same script can be pointed at a deployed
+environment (set `CHECK_DEV_TOOLS=0` to skip the Mailpit/pgAdmin checks, which
+exist only in Compose) as a post-deploy verification step.
+
+## 3. How `.github/workflows/deploy.yml` gets there
+
+The deploy workflow runs on push to `main` and via `workflow_dispatch` (which
+takes an optional `image_tag` — naming a previously built commit SHA redeploys
+or rolls back to it without rebuilding). It is a single `production-deploy`
+concurrency group with `cancel-in-progress: false`, so deployments never
+overlap and are never cancelled halfway through. The `migrate` and `deploy` jobs
+both declare `environment: production`, so a required reviewer on that
+environment gates everything that touches production.
+
+**Job 1 — `build`**
+
+1. **Authenticate to AWS via OIDC** (`aws-actions/configure-aws-credentials`, `role-to-assume: ${{ secrets.AWS_ROLE_ARN }}`) — no long-lived AWS keys exist in GitHub; the workflow assumes a role trusted for GitHub's OIDC provider, scoped to this repository, for the job's lifetime.
+2. **Log in to ECR** (`aws-actions/amazon-ecr-login`).
+3. **Build and push both images** from their `production` stages with Buildx + GitHub Actions layer caching, tagged with the **commit SHA** (and `latest` for convenience). Deployments always reference the SHA tag, never `latest`, so what is running is unambiguous and reproducible.
+4. **Verify the images exist in ECR** (`aws ecr describe-images`), which fails fast if a manual redeploy names a tag that was never built.
+
+**Job 2 — `migrate`**
+
+5. **Register a new backend task definition revision** pinned to the new image: `describe-task-definition` → strip the read-only fields (`taskDefinitionArn`, `revision`, `status`, `requiresAttributes`, `compatibilities`, `registeredAt/By`) with `jq` → swap the container's `image` → `register-task-definition`. The new revision's ARN is a job output.
+6. **Run `npx prisma migrate deploy` as a one-off Fargate task on that new revision** (`aws ecs run-task` with a `containerOverrides` command), in the service's own subnets/security group so it can reach RDS. The workflow waits for the task to stop, reads the container exit code, and on a non-zero exit tails the backend CloudWatch log group and fails the deployment.
+
+   Running the migration on the **newly registered revision** — rather than on whatever the service currently runs — is the point: the migration belongs to the code being deployed. It also runs **before** any task serving that code receives traffic, so a new backend version never queries a schema it doesn't expect. Migrations here are additive/backward-compatible by convention (see `database.md` section 5), which keeps the still-running previous revision valid during the rollover.
+
+**Job 3 — `deploy`**
+
+7. **Record the currently deployed revisions** of both services, so a failure has somewhere to go back to.
+8. **Register the frontend revision** the same way as the backend's.
+9. **Update both services** to their new revisions with `aws ecs update-service --task-definition <arn>` — the backend reuses the exact revision the migration ran on. (This is why the workflow does not use `--force-new-deployment`: that only re-pulls a mutable tag and leaves no revision history to roll back to.)
+10. **Wait for stability**: `aws ecs wait services-stable` blocks until ECS reports the desired count of healthy tasks for both services, or fails on timeout.
+11. **Health check through the ALB**: `curl --fail` against the public health endpoint, retried for up to two minutes — ECS "stable" only means tasks pass their target-group checks, not that the load balancer is serving the app.
+12. **Roll back on failure**: any failure in the rollout puts both services back on the revisions recorded in step 7 and waits for them to stabilise. The step warns explicitly that **database migrations are not rolled back** — the additive-schema convention is what makes the previous revision safe against the new schema.
+13. **Job summary**: image tag, both task definition ARNs, and the result are written to the run summary.
+
+## 4. Required GitHub repository secrets/variables
 
 No real ARNs, account IDs, or hostnames are hard-coded in the workflow — everything below is referenced by name and must be configured in the repository's Settings > Secrets and variables > Actions:
 
 **Secrets** (sensitive):
 | Name | Purpose |
 |---|---|
-| `AWS_ROLE_ARN` | IAM role the GitHub OIDC provider assumes to deploy (ECR push, ECS update, `ecs:RunTask` for migrations). |
+| `AWS_ROLE_ARN` | IAM role the GitHub OIDC provider assumes to deploy. Needs ECR push/read, `ecs:DescribeTaskDefinition`, `ecs:RegisterTaskDefinition`, `ecs:RunTask` + `ecs:DescribeTasks` (migrations), `ecs:UpdateService` + `ecs:DescribeServices`, `iam:PassRole` for the task execution/task roles, and `logs:*` read on the backend log group. |
 
 **Variables** (non-sensitive, environment-specific):
 | Name | Purpose |
@@ -66,13 +109,17 @@ No real ARNs, account IDs, or hostnames are hard-coded in the workflow — every
 | `ECS_SERVICE_FRONTEND` | Frontend ECS service name. |
 | `ECS_TASK_DEFINITION_BACKEND` | Backend task definition family name (for render+deploy). |
 | `ECS_TASK_DEFINITION_FRONTEND` | Frontend task definition family name. |
-| `ECS_SUBNETS` / `ECS_SECURITY_GROUP` | Network configuration for the one-off migration task (`aws ecs run-task --network-configuration`). |
+| `ECS_CONTAINER_BACKEND` / `ECS_CONTAINER_FRONTEND` | Container names inside those task definitions, i.e. which container's `image` is swapped and which one the migration command overrides. Default to `backend`/`frontend` when unset. |
+| `ECS_SUBNETS` / `ECS_SECURITY_GROUP` | Network configuration for the one-off migration task (`aws ecs run-task --network-configuration`). `ECS_SUBNETS` is a comma-separated list. |
 | `HEALTH_CHECK_URL` | Public URL polled for the final health check (e.g. `https://api.example.com/api/v1/health`). |
+| `CLOUDWATCH_LOG_GROUP_BACKEND` | Optional. Backend log group tailed when a migration task fails, e.g. `/ecs/travel-booking-backend`. |
 
 Database credentials, `JWT_SECRET`/`JWT_REFRESH_SECRET`, SMTP credentials, and the S3 bucket name are **not** GitHub secrets — they belong in the ECS task definition as references to AWS Secrets Manager/SSM Parameter Store, injected at container start, exactly as `backend/.env.example` enumerates them for local development.
 
-## 4. Notes and open items
+## 5. Notes and open items
 
-- The CI workflow (`ci.yml`) validates that both Docker images build (`docker build --target production`) on every push/PR; `deploy.yml` reuses that same `production` target so what gets deployed is exactly what CI already proved builds cleanly.
+- `docker-compose-ci.yml` builds the same `production` image stages `deploy.yml` ships, and boots the stack the same way, so what gets deployed is exactly what CI already proved builds and runs.
+- Rollback is automatic on a failed rollout, and manual rollback is a `workflow_dispatch` run with `image_tag` set to an older commit SHA (it skips the build and redeploys that tag).
 - Blue/green or canary rollout (e.g. via CodeDeploy) is a reasonable future enhancement on top of the current rolling ECS deployment; it is not implemented today.
+- Running `.github/scripts/smoke.sh` against the deployed environment as a post-deploy gate is intentionally *not* wired in: it creates and cancels a real booking, so it needs a throwaway environment or dedicated demo tenant rather than production.
 - Autoscaling policies for the ECS services (target-tracking on CPU/memory or request count) are expected to be configured on the ECS services/cluster directly (Terraform/CloudFormation/console), not in this repository's GitHub Actions workflows.

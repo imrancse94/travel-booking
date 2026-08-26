@@ -19,6 +19,12 @@ export function CustomerLayout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Staff and customers sign in through the same /login page, so signed-in
+  // staff get a link across to the admin console rather than having to type
+  // the /admin URL. Any role other than Customer can reach /admin/dashboard
+  // (its own sections stay permission-gated -- see routes/AdminRoutes.jsx).
+  const isStaff = Boolean(user?.roles?.some((role) => role !== 'Customer'));
+
   async function handleLogout() {
     try {
       await logout();
@@ -58,6 +64,12 @@ export function CustomerLayout() {
                   {link.label}
                 </NavLink>
               ))}
+
+            {isStaff && (
+              <NavLink to="/admin" className="customer-header__link" onClick={() => setMenuOpen(false)}>
+                Admin
+              </NavLink>
+            )}
 
             <div className="customer-header__auth">
               {isAuthenticated ? (

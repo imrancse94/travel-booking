@@ -373,7 +373,10 @@ export async function cancelBooking(bookingId, { reason, changedById } = {}) {
 
     const { cancellationFee, refundableAmount } = await calculateCancellation(booking, settings);
 
-    await tx.booking.update({
+    // Return the *updated* row (not the pre-update `booking`), so the API
+    // response reflects the cancelled status/cancelledAt the caller just
+    // caused -- same pattern as checkInBooking/checkOutBooking below.
+    const cancelled = await tx.booking.update({
       where: { id: bookingId },
       data: {
         status: 'cancelled',
@@ -382,12 +385,13 @@ export async function cancelBooking(bookingId, { reason, changedById } = {}) {
         refundableAmount: refundableAmount.toString(),
         cancellationReason: reason,
       },
+      include: { customer: true },
     });
     await tx.bookingStatusHistory.create({
       data: { bookingId, fromStatus: booking.status, toStatus: 'cancelled', changedById, reason },
     });
 
-    return { ...booking, cancellationFee, refundableAmount };
+    return { ...cancelled, cancellationFee, refundableAmount };
   });
 
   await recordAudit({ userId: changedById, action: 'booking.cancelled', entity: 'Booking', entityId: bookingId, newValue: { reason } });

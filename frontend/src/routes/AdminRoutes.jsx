@@ -17,6 +17,8 @@ import { RoomList } from '../pages/admin/rooms/RoomList.jsx';
 import { RoomForm } from '../pages/admin/rooms/RoomForm.jsx';
 import { RatePlanList } from '../pages/admin/rooms/RatePlanList.jsx';
 
+import { ServiceList } from '../pages/admin/services/ServiceList.jsx';
+
 import { CustomerList } from '../pages/admin/customers/CustomerList.jsx';
 import { CustomerDetail } from '../pages/admin/customers/CustomerDetail.jsx';
 
@@ -81,6 +83,10 @@ export function AdminRoutes() {
             <Route path="rooms/rooms/new" element={<RoomForm />} />
             <Route path="rooms/rooms/:id/edit" element={<RoomForm />} />
             <Route path="rooms/rate-plans" element={<RatePlanList />} />
+          </Route>
+
+          <Route element={<ProtectedRoute permission="services.view" />}>
+            <Route path="services" element={<ServiceList />} />
           </Route>
 
           <Route element={<ProtectedRoute permission="customers.view" />}>

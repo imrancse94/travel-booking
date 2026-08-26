@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "travel-booking (docker)",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "booking_db",
+      "Username": "booking_user",
+      "SSLMode": "prefer",
+      "Comment": "Local Docker Compose PostgreSQL. Password is POSTGRES_PASSWORD (dev default: booking_password)."
+    }
+  }
+}

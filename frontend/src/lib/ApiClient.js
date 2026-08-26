@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { compactParams } from '../utils/queryParams.js';
 
 // Thin wrapper around `axios`. Application code depends on this class, never
 // on `axios` directly, so the HTTP client can be swapped or instrumented
@@ -20,6 +21,11 @@ export class ApiClient {
       const token = this.getAccessToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+      // Unselected filters arrive as empty strings; the API's zod query
+      // validators reject those with a 422, so never put them on the wire.
+      if (config.params) {
+        config.params = compactParams(config.params);
       }
       return config;
     });

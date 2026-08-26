@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, useId } from 'react';
 import './FormField.css';
 
 /** Text input with label + error-message support, styled via the shared .form-field classes. */
@@ -6,7 +6,10 @@ export const Input = forwardRef(function Input(
   { label, error, hint, className = '', containerClassName = '', required, id, ...rest },
   ref
 ) {
-  const inputId = id || rest.name;
+  // Fall back to a generated id so the label is always programmatically
+  // associated with its control, even when no id/name is passed.
+  const generatedId = useId();
+  const inputId = id || rest.name || generatedId;
   return (
     <div className={`form-field ${containerClassName}`}>
       {label && (
