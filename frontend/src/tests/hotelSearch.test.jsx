@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import HotelSearch from '../pages/customer/HotelSearch.jsx';
+import HotelSearch from '../views/customer/HotelSearch.jsx';
 import * as roomService from '../services/roomService.js';
 import { renderWithProviders } from './testUtils.jsx';
 import { AVAILABLE_HOTEL } from './fixtures.js';
@@ -23,7 +23,8 @@ describe('Hotel search', () => {
     roomService.checkAvailability.mockResolvedValue({ success: true, data: [AVAILABLE_HOTEL] });
 
     renderWithProviders(<HotelSearch />, {
-      initialEntries: ['/hotels?destination=Dhaka&checkIn=2026-09-10&checkOut=2026-09-13&adults=2&children=1&rooms=1&starRating=4'],
+      pathname: '/hotels',
+      search: '?destination=Dhaka&checkIn=2026-09-10&checkOut=2026-09-13&adults=2&children=1&rooms=1&starRating=4',
     });
 
     await waitFor(() => expect(roomService.checkAvailability).toHaveBeenCalledTimes(1));
@@ -41,7 +42,7 @@ describe('Hotel search', () => {
   it('renders each result with rating, location, cheapest price and amenities', async () => {
     roomService.checkAvailability.mockResolvedValue({ success: true, data: [AVAILABLE_HOTEL] });
 
-    renderWithProviders(<HotelSearch />, { initialEntries: ['/hotels'] });
+    renderWithProviders(<HotelSearch />, { pathname: '/hotels' });
 
     expect(await screen.findByRole('heading', { name: 'Grand Palace Hotel' })).toBeInTheDocument();
     expect(screen.getByText('Dhaka, Bangladesh')).toBeInTheDocument();
@@ -64,7 +65,7 @@ describe('Hotel search', () => {
   it('shows the empty state when nothing is available', async () => {
     roomService.checkAvailability.mockResolvedValue({ success: true, data: [] });
 
-    renderWithProviders(<HotelSearch />, { initialEntries: ['/hotels'] });
+    renderWithProviders(<HotelSearch />, { pathname: '/hotels' });
 
     expect(await screen.findByText(/No hotels found for these dates/i)).toBeInTheDocument();
   });
@@ -72,7 +73,7 @@ describe('Hotel search', () => {
   it('shows an error state when the availability request fails', async () => {
     roomService.checkAvailability.mockRejectedValue(new Error('Availability service unavailable'));
 
-    renderWithProviders(<HotelSearch />, { initialEntries: ['/hotels'] });
+    renderWithProviders(<HotelSearch />, { pathname: '/hotels' });
 
     expect(await screen.findByText(/Availability service unavailable/)).toBeInTheDocument();
   });
@@ -81,12 +82,24 @@ describe('Hotel search', () => {
     roomService.checkAvailability.mockResolvedValue({ success: true, data: [AVAILABLE_HOTEL] });
     const user = userEvent.setup();
 
-    renderWithProviders(<HotelSearch />, { initialEntries: ['/hotels'] });
+    const { router, unmount } = renderWithProviders(<HotelSearch />, { pathname: '/hotels' });
     await screen.findByRole('heading', { name: 'Grand Palace Hotel' });
 
     await user.type(screen.getByLabelText(/destination/i), "Cox's Bazar");
     await user.selectOptions(screen.getByLabelText(/star rating/i), '4');
     await user.click(screen.getByRole('button', { name: /search hotels/i }));
+
+    // Submitting no longer re-queries directly: the filters go into the URL and
+    // the new search params are what drive the next query. Both halves are
+    // checked -- the URL the form produces, then the query that URL causes.
+    expect(router.push).toHaveBeenCalledTimes(1);
+    const pushed = new URL(router.push.mock.calls[0][0], 'http://localhost');
+    expect(pushed.pathname).toBe('/hotels');
+    expect(pushed.searchParams.get('destination')).toBe("Cox's Bazar");
+    expect(pushed.searchParams.get('starRating')).toBe('4');
+
+    unmount();
+    renderWithProviders(<HotelSearch />, { pathname: '/hotels', search: pushed.search });
 
     await waitFor(() => expect(roomService.checkAvailability).toHaveBeenCalledTimes(2));
     const params = roomService.checkAvailability.mock.calls.at(-1)[0];
@@ -105,7 +118,7 @@ describe('Hotel search', () => {
       ],
     });
 
-    renderWithProviders(<HotelSearch />, { initialEntries: ['/hotels'] });
+    renderWithProviders(<HotelSearch />, { pathname: '/hotels' });
 
     const card = (await screen.findByRole('heading', { name: 'Grand Palace Hotel' })).closest('.hotel-card');
     expect(within(card).getByText(/Contact us for pricing/i)).toBeInTheDocument();

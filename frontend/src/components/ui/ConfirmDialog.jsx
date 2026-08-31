@@ -1,3 +1,5 @@
+'use client';
+
 import { Modal } from './Modal.jsx';
 import { Button } from './Button.jsx';
 

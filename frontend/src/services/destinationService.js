@@ -3,8 +3,10 @@ import { httpClient } from './httpClient.js';
 // REST shape per instructions.md section 22 (Travel Agency Module -> Destinations).
 const BASE = '/destinations';
 
-export function list(params) {
-  return httpClient.get(BASE, { params });
+// `config` is forwarded to axios so callers can pass an AbortSignal; the
+// destination typeahead uses it to drop superseded in-flight requests.
+export function list(params, config) {
+  return httpClient.get(BASE, { params, ...config });
 }
 
 export function getById(id) {

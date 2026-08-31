@@ -60,6 +60,18 @@ export const PAYMENT_METHOD_OPTIONS = [
   { value: 'online_gateway', label: 'Online Gateway' },
 ];
 
+// Mirrors SUPPORTED_GATEWAYS in backend/src/integrations/payment/paymentGateway.js.
+// A gateway whose credentials are not configured is refused by the API with a
+// message naming the missing variable, so every option stays selectable here
+// and the failure is explicit rather than hidden.
+export const PAYMENT_GATEWAY_OPTIONS = [
+  { value: 'mock', label: 'Sandbox (simulated charge)' },
+  { value: 'stripe', label: 'Card — Stripe' },
+  { value: 'paypal', label: 'PayPal' },
+  { value: 'bkash', label: 'bKash' },
+  { value: 'nagad', label: 'Nagad' },
+];
+
 export const PAYMENT_STATUS_OPTIONS = [
   { value: 'pending', label: 'Pending' },
   { value: 'processing', label: 'Processing' },

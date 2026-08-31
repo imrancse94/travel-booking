@@ -1,10 +1,10 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Route, Routes, useLocation } from 'react-router-dom';
-import HotelDetails from '../pages/customer/HotelDetails.jsx';
+import HotelDetails from '../views/customer/HotelDetails.jsx';
 import * as hotelService from '../services/hotelService.js';
 import * as roomService from '../services/roomService.js';
 import { renderWithProviders, CUSTOMER_USER } from './testUtils.jsx';
+import { readCheckoutDraft } from '../lib/navState.js';
 import { AVAILABLE_HOTEL, HOTEL_DETAIL } from './fixtures.js';
 
 vi.mock('../services/hotelService.js', () => ({
@@ -27,33 +27,15 @@ vi.mock('../services/roomService.js', () => ({
   checkAvailability: vi.fn(),
 }));
 
-/** Stands in for the real checkout so the handed-off router state is assertable. */
-function CheckoutProbe() {
-  const location = useLocation();
-  return <pre data-testid="checkout-state">{JSON.stringify(location.state)}</pre>;
-}
-
-function LoginProbe() {
-  const location = useLocation();
-  return (
-    <div>
-      <h1>Login page</h1>
-      <pre data-testid="login-state">{JSON.stringify(location.state)}</pre>
-    </div>
-  );
-}
-
 const STAY_QUERY = '?checkIn=2026-09-10&checkOut=2026-09-13&adults=2&children=0&rooms=1';
 
 function renderPage(options = {}) {
-  return renderWithProviders(
-    <Routes>
-      <Route path="/hotels/:id" element={<HotelDetails />} />
-      <Route path="/checkout" element={<CheckoutProbe />} />
-      <Route path="/login" element={<LoginProbe />} />
-    </Routes>,
-    { initialEntries: [`/hotels/hotel-grand-palace${STAY_QUERY}`], ...options }
-  );
+  return renderWithProviders(<HotelDetails />, {
+    pathname: '/hotels/hotel-grand-palace',
+    search: STAY_QUERY,
+    params: { id: 'hotel-grand-palace' },
+    ...options,
+  });
 }
 
 async function standardCard() {
@@ -113,13 +95,17 @@ describe('Room selection', () => {
 
   it('hands the selection to checkout for a signed-in guest', async () => {
     const user = userEvent.setup();
-    renderPage({ user: CUSTOMER_USER });
+    const { router } = renderPage({ user: CUSTOMER_USER });
 
     const card = await standardCard();
     await user.click(within(card).getByRole('button', { name: '+' }));
     await user.click(screen.getByRole('button', { name: /proceed to checkout/i }));
 
-    const state = JSON.parse(screen.getByTestId('checkout-state').textContent);
+    expect(router.push).toHaveBeenCalledWith('/checkout');
+
+    // The selection can no longer ride along with the navigation, so it is
+    // handed over through sessionStorage instead.
+    const state = readCheckoutDraft();
     expect(state).toMatchObject({
       hotelId: 'hotel-grand-palace',
       hotelName: 'Grand Palace Hotel',
@@ -145,16 +131,16 @@ describe('Room selection', () => {
 
   it('sends an anonymous guest to login and remembers the hotel they came from', async () => {
     const user = userEvent.setup();
-    renderPage();
+    const { router } = renderPage();
 
     const card = await standardCard();
     await user.click(within(card).getByRole('button', { name: '+' }));
     await user.click(screen.getByRole('button', { name: /proceed to checkout/i }));
 
-    expect(screen.getByRole('heading', { name: /login page/i })).toBeInTheDocument();
-    const state = JSON.parse(screen.getByTestId('login-state').textContent);
-    expect(state.from.pathname).toBe('/hotels/hotel-grand-palace');
-    expect(state.from.search).toContain('checkIn=2026-09-10');
+    expect(router.push).toHaveBeenCalledTimes(1);
+    const target = decodeURIComponent(router.push.mock.calls[0][0]);
+    expect(target).toContain('/login?from=/hotels/hotel-grand-palace');
+    expect(target).toContain('checkIn=2026-09-10');
     expect(screen.getByText(/Please sign in to continue booking/i)).toBeInTheDocument();
   });
 

@@ -43,7 +43,7 @@ healthy.) This starts six services (`docker-compose.yml`):
 | `pgadmin` | `dpage/pgadmin4` | 5050 | database browser (dev only) |
 | `mailpit` | `axllent/mailpit` | 8026 | catches every email the app sends |
 | `backend` | built from `backend/Dockerfile`, `development` stage | 4000 | Express API |
-| `frontend` | built from `frontend/Dockerfile`, `development` stage | 5173 | Vite dev server |
+| `frontend` | built from `frontend/Dockerfile`, `development` stage | 5173 | Next.js dev server (also proxies `/api/*` to `backend`) |
 
 `pgadmin` starts in desktop mode (no pgAdmin login screen) and comes with the
 `postgres` service pre-registered as a connection from `pgadmin.servers.json`
@@ -64,6 +64,21 @@ docker compose down
 ```
 
 (add `-v` if you also want to drop the `postgres_data`/`redis_data` volumes and start from a clean database).
+
+### After changing a package.json
+
+`node_modules` lives in a named volume so it never collides with the host's.
+Docker seeds that volume from the image only when it is *first* created, so
+after adding or upgrading a dependency the volume still holds the old tree and
+shadows the rebuilt image — which surfaces as `sh: <binary>: not found`.
+`make rebuild` does not fix it (it rebuilds images, not volumes) and `make clean`
+would take the database with it. Use:
+
+```bash
+make deps-refresh
+```
+
+which drops only the dependency volumes and brings the stack back up.
 
 ## 4. Migrations
 
@@ -137,7 +152,7 @@ seeded dev data, because the suites truncate tables between runs. Running
 the container has — i.e. your dev database.
 
 - Backend tests run with Jest + Supertest (`cross-env NODE_ENV=test jest --runInBand`, ESM mode via `--experimental-vm-modules`) against `backend/tests/unit` and `backend/tests/integration`.
-- Frontend tests run with Vitest + Testing Library (`vitest run`) against `frontend/src/tests` and any `*.test.jsx`/`*.test.js` files colocated with components. The committed suites cover login, protected/permission-gated routes, hotel search, hotel details, room selection, the multi-step checkout (including the exact booking payload it POSTs) and the booking confirmation page. `src/tests/testUtils.jsx` renders a component inside the real Redux store + router + toast providers with a seeded session, and `src/tests/fixtures.js` holds API-shaped fixtures.
+- Frontend tests run with Vitest + Testing Library (`vitest run`) against `frontend/src/tests` and any `*.test.jsx`/`*.test.js` files colocated with components. The committed suites cover login, the auth and permission gates, hotel search, hotel details, room selection, the multi-step checkout (including the exact booking payload it POSTs) and the booking confirmation page. `src/tests/testUtils.jsx` renders a component inside the real Redux store + toast provider with a seeded session and a stubbed `next/navigation` location (`pathname`/`search`/`params`), returning `router` spies to assert navigation against; `src/tests/fixtures.js` holds API-shaped fixtures.
 
 Watch modes are available via `npm run test:watch` in either package if you prefer running tests outside Docker against a host-installed Node 20 (`npm install` in the respective folder first).
 
@@ -147,8 +162,7 @@ Watch modes are available via `npm run test:watch` in either package if you pref
 make smoke
 ```
 
-Runs `.github/scripts/smoke.sh` (the same script `docker-compose-ci.yml` runs in
-CI): ~60 assertions over the live HTTP API — health endpoints, login and
+Runs `.github/scripts/smoke.sh`: ~60 assertions over the live HTTP API — health endpoints, login and
 rejected credentials, RBAC across roles, availability search, booking creation,
 double-booking prevention, payment, invoice PDF, cancellation, and every
 report/dashboard endpoint. It needs a seeded stack (`make setup`) and creates

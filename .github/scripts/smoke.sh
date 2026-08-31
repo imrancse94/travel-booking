@@ -5,8 +5,8 @@
 # Exercises the real HTTP surface -- health, auth, RBAC, availability, the
 # booking lifecycle, double-booking prevention, payment, invoice PDF,
 # cancellation, reports/exports -- and exits non-zero on the first failed
-# expectation. Used by .github/workflows/docker-compose-ci.yml and by
-# `make smoke` locally.
+# expectation. Run by `make smoke` locally; see documentation/deployment.md
+# section 2 for why it is not wired into the deploy workflow.
 #
 # Requires: curl, python3. Assumes the database has been seeded.
 #

@@ -1,7 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Route, Routes } from 'react-router-dom';
-import Login from '../pages/auth/Login.jsx';
+import Login from '../views/auth/Login.jsx';
 import * as authService from '../services/authService.js';
 import { renderWithProviders, CUSTOMER_USER } from './testUtils.jsx';
 
@@ -12,15 +11,8 @@ vi.mock('../services/authService.js', () => ({
   fetchCurrentUser: vi.fn(),
 }));
 
-function renderLogin(initialEntries = ['/login']) {
-  return renderWithProviders(
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={<h1>Home page</h1>} />
-      <Route path="/my-bookings" element={<h1>My bookings page</h1>} />
-    </Routes>,
-    { initialEntries }
-  );
+function renderLogin(search = '') {
+  return renderWithProviders(<Login />, { pathname: '/login', search });
 }
 
 beforeEach(() => {
@@ -54,25 +46,39 @@ describe('Login page', () => {
   it('redirects to the home page after a successful login', async () => {
     authService.login.mockResolvedValue(CUSTOMER_USER);
     const user = userEvent.setup();
-    renderLogin();
+    const { router } = renderLogin();
 
     await user.type(screen.getByLabelText(/email/i), 'customer@example.com');
     await user.type(screen.getByLabelText(/password/i), 'Customer@12345');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
-    expect(await screen.findByRole('heading', { name: /home page/i })).toBeInTheDocument();
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/'));
   });
 
   it('returns the user to the page that sent them to login', async () => {
     authService.login.mockResolvedValue(CUSTOMER_USER);
     const user = userEvent.setup();
-    renderLogin([{ pathname: '/login', state: { from: { pathname: '/my-bookings' } } }]);
+    const { router } = renderLogin('?from=%2Fmy-bookings');
 
     await user.type(screen.getByLabelText(/email/i), 'customer@example.com');
     await user.type(screen.getByLabelText(/password/i), 'Customer@12345');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
-    expect(await screen.findByRole('heading', { name: /my bookings page/i })).toBeInTheDocument();
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/my-bookings'));
+  });
+
+  it('ignores an off-site ?from= rather than following it', async () => {
+    // As router state this was unforgeable; as a query param it is attacker
+    // supplied, so anything not a same-origin path must fall back to '/'.
+    authService.login.mockResolvedValue(CUSTOMER_USER);
+    const user = userEvent.setup();
+    const { router } = renderLogin('?from=https%3A%2F%2Fevil.example%2Fphish');
+
+    await user.type(screen.getByLabelText(/email/i), 'customer@example.com');
+    await user.type(screen.getByLabelText(/password/i), 'Customer@12345');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/'));
   });
 
   it('shows the API error message and stays on the page when login fails', async () => {

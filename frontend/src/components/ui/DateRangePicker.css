@@ -1,0 +1,259 @@
+.drp {
+  position: relative;
+}
+
+.drp__triggers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+/* Deliberately mirrors .form-field__control so a trigger sits flush beside the
+   real inputs in the same row. */
+.drp__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  /* Mirrors .form-field__control's padding and font so a trigger is the same
+     height as the inputs beside it without either hardcoding a pixel value. */
+  min-height: 38px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.drp__trigger:hover {
+  border-color: #cbd5e1;
+}
+
+.drp__trigger:focus-visible,
+.drp__trigger--active {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.drp__trigger-icon {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.drp__trigger--active .drp__trigger-icon,
+.drp__trigger:hover .drp__trigger-icon {
+  color: var(--color-primary);
+}
+
+.drp__placeholder {
+  color: var(--color-text-muted);
+}
+
+.drp__popover {
+  /* Portalled to <body> and positioned from the anchor's rect, so no ancestor's
+     overflow can clip it and opening it never reflows the page beneath. */
+  position: fixed;
+  z-index: 200;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: 0 16px 40px rgba(16, 24, 40, 0.18);
+}
+
+.drp__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.drp__nav-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.drp__nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.drp__nav-btn:hover {
+  background: var(--color-bg);
+}
+
+.drp__nav-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.drp__months {
+  display: flex;
+  gap: var(--space-5);
+}
+
+.drp__month-name {
+  margin: 0 0 var(--space-2);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.drp__weekdays,
+.drp__week {
+  display: grid;
+  grid-template-columns: repeat(7, 36px);
+}
+
+.drp__weekdays span {
+  padding-bottom: var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.drp__cell,
+.drp__day--empty {
+  display: block;
+  height: 36px;
+}
+
+.drp__day {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.drp__day:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+}
+
+.drp__day:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.drp__day:disabled {
+  color: #cbd5e1;
+  cursor: default;
+}
+
+.drp__day--today:not(.drp__day--start):not(.drp__day--end) {
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  font-weight: 600;
+}
+
+/* Square inner edges so a continuous range reads as one bar rather than a row
+   of separate pills. */
+.drp__day--in-range {
+  background: var(--color-primary-soft);
+  border-radius: 0;
+}
+
+.drp__day--start,
+.drp__day--end {
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.drp__day--start {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.drp__day--end {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.drp__day--start.drp__day--end {
+  border-radius: var(--radius-sm);
+}
+
+.drp__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.drp__summary {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.drp__done {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: #fff;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.drp__done:hover {
+  background: var(--color-primary-hover);
+}
+
+.drp__done:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* One month at a time below two-month width, and pin the popover to the
+   trigger's left edge so it cannot overflow the viewport on a phone. */
+@media (max-width: 720px) {
+  .drp__months {
+    gap: var(--space-4);
+  }
+
+  .drp__month:last-child {
+    display: none;
+  }
+
+  .drp__weekdays,
+  .drp__week {
+    grid-template-columns: repeat(7, 1fr);
+  }
+
+  .drp__day {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drp__trigger {
+    transition: none;
+  }
+}

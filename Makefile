@@ -9,6 +9,7 @@
 # Full list:     make help
 
 COMPOSE        ?= docker compose
+PROJECT        ?= travel-booking
 BACKEND        ?= backend
 FRONTEND       ?= frontend
 PG_SERVICE     ?= postgres
@@ -75,6 +76,19 @@ dev: env ## Start the stack in the foreground with logs attached (Ctrl-C stops i
 rebuild: env ## Rebuild images from scratch (no cache) and restart
 	$(COMPOSE) build --no-cache
 	$(COMPOSE) up -d --wait
+
+# node_modules lives in a named volume so it does not collide with the host's.
+# Docker seeds that volume from the image only when it is first created, so
+# after a dependency change the volume still holds the OLD tree and shadows the
+# rebuilt image -- which shows up as `sh: <binary>: not found`. `make rebuild`
+# does not fix it (it rebuilds images, not volumes) and `make clean` would take
+# the database with it. This drops only the dependency volumes.
+deps-refresh: env ## Re-install deps in the containers after changing package.json (keeps databases)
+	$(COMPOSE) rm -sf $(BACKEND) $(FRONTEND)
+	-docker volume rm $(PROJECT)_backend_node_modules \
+		$(PROJECT)_frontend_node_modules \
+		$(PROJECT)_frontend_next_cache
+	$(COMPOSE) up --build -d --wait
 
 down: ## Stop and remove the containers (keeps database volumes)
 	$(COMPOSE) down --remove-orphans
@@ -192,7 +206,7 @@ build: build-backend build-frontend ## Build both production Docker images
 build-backend: ## Build the backend production image
 	docker build --target production -t travel-booking-backend:local ./backend
 
-build-frontend: ## Build the frontend production image (nginx + static bundle)
+build-frontend: ## Build the frontend production image (Next.js standalone server)
 	docker build --target production -t travel-booking-frontend:local ./frontend
 
 ##@ Without Docker (host Node 20)
@@ -207,7 +221,7 @@ local-install: ## npm ci in backend and frontend on the host
 local-backend: ## Run the backend on the host (point DATABASE_URL/REDIS_URL at localhost first)
 	cd backend && npx prisma migrate deploy && npm run dev
 
-local-frontend: ## Run the Vite dev server on the host
+local-frontend: ## Run the Next.js dev server on the host
 	cd frontend && npm run dev
 
 ##@ Cleanup
@@ -219,7 +233,7 @@ clean: ## DESTRUCTIVE: remove containers, named volumes (database included) and 
 prune: ## Reclaim disk: prune dangling Docker build cache and images
 	docker system prune -f
 
-.PHONY: help setup env urls up dev rebuild down stop start restart restart-backend \
+.PHONY: help setup env urls up dev rebuild deps-refresh down stop start restart restart-backend \
 	restart-frontend ps logs logs-backend logs-frontend health sh-backend sh-frontend \
 	psql redis-cli pgadmin migrate migrate-new migrate-reset prisma-generate studio seed db-reset \
 	test test-backend test-frontend smoke lint lint-backend lint-frontend lint-fix ci \

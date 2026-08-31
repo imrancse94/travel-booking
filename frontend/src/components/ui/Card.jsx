@@ -1,3 +1,5 @@
+'use client';
+
 import './Card.css';
 
 /** Generic surface container with an optional header (title + actions slot). */

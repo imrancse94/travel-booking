@@ -6,46 +6,389 @@
   padding: var(--space-5) 0 var(--space-6);
 }
 
+/* ---------------------------------------------------------------- landing */
+
 .hero {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+  position: relative;
+  /* The soft off-centre highlight is a background layer rather than a
+     positioned pseudo-element, so the hero needs no `overflow: hidden` to clip
+     it -- which matters because the search panel's dropdowns (date picker,
+     destination suggestions) open past the hero's bottom edge and would
+     otherwise be cut off. */
+  background:
+    radial-gradient(900px 520px at 82% -15%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 62%),
+    linear-gradient(160deg, var(--color-primary-deep) 0%, var(--color-primary-hover) 58%, var(--color-primary) 100%);
   color: #fff;
-  padding: var(--space-6) 0;
+  padding: var(--space-8) 0;
+}
+
+.hero__inner {
+  max-width: 720px;
+}
+
+.hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .hero__title {
-  margin: 0 0 var(--space-2);
-  font-size: 2rem;
+  margin: 0 0 var(--space-3);
+  /* Scales with the viewport instead of stepping at one breakpoint, so the
+     headline stays on two lines from phone to desktop. */
+  font-size: clamp(2rem, 4.6vw, 3.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   font-weight: 800;
 }
 
 .hero__subtitle {
-  margin: 0 0 var(--space-5);
-  opacity: 0.92;
-  max-width: 640px;
+  margin: 0;
+  max-width: 34rem;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
 }
 
-.search-panel {
-  margin-top: var(--space-4);
-}
-
+/* Shared by the landing hero and the /hotels filter bar. Kept visually neutral
+   because HotelSearch renders it inside a <Card>, which already supplies the
+   surface, padding and border. */
 .search-panel__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0 var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
   align-items: end;
 }
 
-.search-panel__actions {
-  margin-top: var(--space-3);
+/* Fields carry a bottom margin for stacked forms; in a single-row filter bar it
+   pushes every control up off the submit button's baseline. */
+.search-panel__grid .form-field {
+  margin-bottom: 0;
+}
+
+/* One height for inputs, selects, the date triggers and the submit, so the row
+   lines up regardless of which control types it happens to contain. */
+.search-panel__grid .form-field__control,
+.search-panel__grid .drp__trigger,
+.search-panel__grid .btn {
+  height: 40px;
+}
+
+/* The submit deliberately does NOT override the grid's `align-items: end`.
+   Every other cell is a label stacked above a 40px control, so ending the
+   button at the row's baseline makes its box line up exactly with the inputs
+   beside it. Centring it in the taller cell instead leaves it floating above
+   them. */
+
+/* The picker occupies ONE grid cell and lays its two triggers out inside it.
+   Both grids give that cell a wide track of its own (1.8fr / 2fr), so it must
+   not also span a second column -- doing so consumed the neighbouring track
+   and wrapped the last field onto a new row. It only goes full-width at the
+   narrow breakpoints below, where the row stacks anyway. */
+
+/* Lifted out of the hero and over the section below, which is what makes the
+   search read as the page's primary action rather than part of the banner. */
+.search-panel--hero {
+  margin-top: var(--space-7);
+  margin-bottom: calc(-1 * var(--space-7));
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: 0 18px 40px rgba(16, 24, 40, 0.16);
+}
+
+.search-panel--hero .search-panel__grid {
+  grid-template-columns: 1.6fr 2fr 0.9fr auto;
+}
+
+.search-panel__submit {
+  padding-inline: var(--space-6);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .search-panel--hero .search-panel__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .search-panel--hero .search-panel__dates {
+    grid-column: 1 / -1;
+  }
+
+  .search-panel--hero .search-panel__submit {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .search-panel--hero .search-panel__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .search-panel__dates {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Clears the search panel's negative margin so the first band is not overlapped. */
+.landing-body {
+  padding-top: calc(var(--space-7) + var(--space-6));
+}
+
+.trust-strip {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  margin-bottom: var(--space-8);
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+}
+
+.trust-strip__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.trust-strip__item svg {
+  flex: none;
+  color: var(--color-success);
+}
+
+.landing-section {
+  margin-bottom: var(--space-8);
+}
+
+.landing-section__head {
+  margin-bottom: var(--space-5);
+}
+
+.landing-section__title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+}
+
+.landing-section__lead {
+  margin: 0;
+  max-width: 46rem;
+  color: var(--color-text-muted);
+}
+
+.destination-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.destination-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.destination-card:hover,
+.destination-card:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+/* Name and country read as one line ("Sajek, Bangladesh"); the country was
+   previously an inline span relying on margin-top, which does nothing on an
+   inline box, so the two ran together. */
+.destination-card__label {
+  line-height: 1.45;
+}
+
+.destination-card__name {
+  font-weight: 600;
+}
+
+.destination-card__country {
+  color: var(--color-text-muted);
+}
+
+.destination-card__arrow {
+  flex: none;
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.destination-card:hover .destination-card__arrow {
+  color: var(--color-primary);
+  transform: translateX(2px);
+}
+
+.value-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-5);
+}
+
+.value-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.value-item__title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.0625rem;
+}
+
+.value-item__text {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.65;
+}
+
+.cta-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-soft);
+  border: 1px solid #dbe6fb;
+}
+
+.cta-band__title {
+  margin: 0 0 var(--space-1);
+  font-size: 1.25rem;
+}
+
+.cta-band__text {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* Respect a reduced-motion preference: the lift and nudge are decorative. */
+@media (prefers-reduced-motion: reduce) {
+  .destination-card,
+  .destination-card__arrow {
+    transition: none;
+  }
+
+  .destination-card:hover,
+  .destination-card:focus-visible {
+    transform: none;
+  }
+
+  .destination-card:hover .destination-card__arrow {
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------- /hotels filters */
+
+/* Not a Card: the card body's horizontal padding inset the controls from the
+   page measure. A rule and generous vertical space separate it instead. */
+.filter-bar {
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.filter-bar__grid {
+  grid-template-columns: 1.4fr 1.8fr 1.2fr 0.9fr;
+}
+
+@media (max-width: 900px) {
+  .filter-bar__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filter-bar__grid .search-panel__dates {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .filter-bar__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The submit sits on its own row here (unlike the hero, where it is a cell in
+   the field grid), so it is centred with room above it. */
+.search-panel__actions {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-5);
+}
+
+.results-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: var(--space-6) 0 var(--space-4);
+}
+
+.results-head__title {
+  margin: 0 0 var(--space-1);
+  font-size: 1.375rem;
+  letter-spacing: -0.01em;
+}
+
+.results-head__meta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.results-head__sort {
+  min-width: 190px;
+  margin-bottom: 0;
+}
+
+.amenity-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.hotel-card__policy {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
 }
 
 .hotel-results {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: var(--space-4);
-  margin-top: var(--space-4);
+  gap: var(--space-5);
 }
 
 .hotel-card {
@@ -53,6 +396,27 @@
   flex-direction: column;
   overflow: hidden;
   height: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+.hotel-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hotel-card {
+    transition: none;
+  }
+
+  .hotel-card:hover {
+    transform: none;
+  }
 }
 
 .hotel-card__image {
@@ -72,10 +436,10 @@
 }
 
 .hotel-card__body {
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-5) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
   flex: 1;
 }
 
@@ -115,8 +479,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
-  padding-top: var(--space-2);
+  gap: var(--space-3);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
 }
 
@@ -349,4 +713,39 @@
   .checkout-layout {
     grid-template-columns: 1fr;
   }
+}
+
+/* Payment failure on the checkout's last step. Persistent, not a toast: the
+   booking exists and is held, so the message has to stay on screen until the
+   customer acts on it. */
+.payment-alert {
+  margin-top: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid #fecaca;
+  border-left: 4px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: #fef2f2;
+}
+
+.payment-alert__title {
+  margin: 0 0 var(--space-1);
+  font-weight: 700;
+  color: #991b1b;
+}
+
+.payment-alert__message {
+  margin: 0 0 var(--space-2);
+  color: #7f1d1d;
+}
+
+.payment-alert__note {
+  margin: 0 0 var(--space-4);
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.payment-alert__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
 }

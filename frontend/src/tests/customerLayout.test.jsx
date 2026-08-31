@@ -1,15 +1,12 @@
 import { screen } from '@testing-library/react';
-import { Route, Routes } from 'react-router-dom';
 import { CustomerLayout } from '../layouts/CustomerLayout.jsx';
 import { renderWithProviders, CUSTOMER_USER, AGENT_USER, SUPER_ADMIN_USER } from './testUtils.jsx';
 
 function renderLayout(options) {
   return renderWithProviders(
-    <Routes>
-      <Route element={<CustomerLayout />}>
-        <Route path="/" element={<h1>Home page</h1>} />
-      </Route>
-    </Routes>,
+    <CustomerLayout>
+      <h1>Home page</h1>
+    </CustomerLayout>,
     options
   );
 }

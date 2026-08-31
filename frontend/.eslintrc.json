@@ -11,6 +11,9 @@
       "jsx": true
     }
   },
+  "globals": {
+    "process": "readonly"
+  },
   "settings": {
     "react": {
       "version": "detect"

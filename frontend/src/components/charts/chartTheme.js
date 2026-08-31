@@ -1,3 +1,5 @@
+'use client';
+
 // Centralized chart color/style tokens for the recharts wrappers in this
 // folder. Nothing outside components/charts/ should import recharts or pick
 // chart colors directly -- see the project-wide "wrap every library" rule.

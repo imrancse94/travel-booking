@@ -65,5 +65,12 @@ export function getBreadcrumbTrail(pathname) {
     const label = SECTION_LABELS[seg] || humanize(seg);
     trail.push(isLast ? { label } : { label, to: cumulative });
   });
-  return trail;
+
+  // Some paths repeat a label: /admin/dashboard is the Dashboard root followed
+  // by the Dashboard segment, and /admin/rooms/rooms is the Rooms section
+  // followed by the Rooms page. Both rendered "Dashboard / Dashboard" and
+  // tripped React's duplicate-key warning. Keep the LATER entry of any
+  // consecutive pair, since the last item is the current page and correctly
+  // carries no link.
+  return trail.filter((item, i) => item.label !== trail[i + 1]?.label);
 }

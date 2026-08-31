@@ -1,3 +1,5 @@
+'use client';
+
 import './charts.css';
 
 /** Shared recharts <Tooltip content={...}/> renderer so every chart's tooltip looks the same. */

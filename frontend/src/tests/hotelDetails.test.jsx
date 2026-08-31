@@ -1,7 +1,6 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Route, Routes } from 'react-router-dom';
-import HotelDetails from '../pages/customer/HotelDetails.jsx';
+import HotelDetails from '../views/customer/HotelDetails.jsx';
 import * as hotelService from '../services/hotelService.js';
 import * as roomService from '../services/roomService.js';
 import { renderWithProviders } from './testUtils.jsx';
@@ -31,10 +30,13 @@ const STAY_QUERY = '?checkIn=2026-09-10&checkOut=2026-09-13&adults=2&children=0&
 
 function renderHotelDetails(options = {}) {
   return renderWithProviders(
-    <Routes>
-      <Route path="/hotels/:id" element={<HotelDetails />} />
-    </Routes>,
-    { initialEntries: [`/hotels/hotel-grand-palace${STAY_QUERY}`], ...options }
+    <HotelDetails />,
+    {
+      pathname: '/hotels/hotel-grand-palace',
+      search: STAY_QUERY,
+      params: { id: 'hotel-grand-palace' },
+      ...options,
+    }
   );
 }
 
@@ -104,15 +106,25 @@ describe('Hotel details page', () => {
 
   it('re-queries availability when the stay is changed', async () => {
     const user = userEvent.setup();
-    renderHotelDetails();
+    const { router, unmount } = renderHotelDetails();
     await screen.findByRole('heading', { name: 'Grand Palace Hotel' });
 
     await user.clear(screen.getByLabelText(/adults/i));
     await user.type(screen.getByLabelText(/adults/i), '3');
     await user.click(screen.getByRole('button', { name: /update search/i }));
 
+    // replace(), not push(): changing the stay refines the current view rather
+    // than adding a back-button step.
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    const next = new URL(router.replace.mock.calls[0][0], 'http://localhost');
+    expect(next.pathname).toBe('/hotels/hotel-grand-palace');
+    expect(next.searchParams.get('adults')).toBe('3');
+
+    unmount();
+    renderHotelDetails({ search: next.search });
+
     await screen.findByRole('heading', { name: 'Grand Palace Hotel' });
-    expect(roomService.checkAvailability.mock.calls.at(-1)[0].adults).toBe('3');
+    await waitFor(() => expect(roomService.checkAvailability.mock.calls.at(-1)[0].adults).toBe('3'));
   });
 
   it('surfaces an error state when the hotel cannot be loaded', async () => {

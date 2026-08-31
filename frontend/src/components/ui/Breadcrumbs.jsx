@@ -1,4 +1,6 @@
-import { Link } from 'react-router-dom';
+'use client';
+
+import Link from 'next/link';
 import './Breadcrumbs.css';
 
 /** `items`: [{ label, to? }] — the last item is rendered as plain (non-link) current-page text. */
@@ -10,8 +12,10 @@ export function Breadcrumbs({ items = [] }) {
         {items.map((item, i) => {
           const isLast = i === items.length - 1;
           return (
-            <li key={item.label} className={isLast ? 'breadcrumbs__item--current' : 'breadcrumbs__item'}>
-              {!isLast && item.to ? <Link to={item.to}>{item.label}</Link> : <span>{item.label}</span>}
+            // Keyed by position, not label: a trail is rebuilt wholesale from the
+            // pathname, and labels are not guaranteed unique across segments.
+            <li key={`${i}-${item.label}`} className={isLast ? 'breadcrumbs__item--current' : 'breadcrumbs__item'}>
+              {!isLast && item.to ? <Link href={item.to}>{item.label}</Link> : <span>{item.label}</span>}
               {!isLast && <span className="breadcrumbs__sep">/</span>}
             </li>
           );

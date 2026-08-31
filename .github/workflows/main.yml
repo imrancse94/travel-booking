@@ -1,0 +1,687 @@
+# Build both images, push them to GHCR, then roll them out on a single EC2
+# instance over SSH and smoke-test the result through nginx.
+#
+#   backend-test   lint + Jest against throwaway Postgres and Redis services
+#   frontend-test  lint + Vitest against the React app
+#   build          build + push the backend and frontend images to GHCR
+#   check-secrets  confirm the EC2 secrets exist, otherwise skip the deploy
+#   deploy         ship env + compose + nginx conf, migrate, restart, smoke-test
+#
+# Pull requests stop after the two test jobs; only a push to main goes on to
+# build and deploy.
+#
+# The only AWS resource involved is the EC2 instance itself. Postgres and Redis
+# run as containers on that same box, and the image registry is GHCR, which
+# comes free with the repository. There is no ECR, ECS, RDS or ElastiCache.
+#
+# nginx is the only container with a published port. It reverse-proxies /api/*
+# to the Express backend and everything else to the Next.js server, so the two
+# app containers are unreachable from outside the Compose network and the whole
+# site is same-origin (no CORS preflight in the browser).
+#
+# Putting the API proxy in nginx rather than in next.config.js also removes a
+# build-time coupling: `output: 'standalone'` freezes Next's rewrites into the
+# server bundle, so a Next-side proxy target can only be changed by rebuilding
+# the image. nginx reads its config at container start.
+#
+# docker-compose.prod.yml and the nginx vhost are generated below and copied
+# over, so the repo carries exactly one workflow file and nothing to drift.
+name: CI/CD — Build & Deploy to AWS EC2
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Existing image tag (commit SHA) to deploy. Leave blank to build this ref. Set it to redeploy or roll back to an earlier build without rebuilding.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write # push to GHCR with the built-in GITHUB_TOKEN — no PAT to rotate
+  issues: write # open an issue when a build breaks
+
+# Production deploys are serialised and never cancelled halfway through. PR
+# runs are only tests, so a newer push to the same branch may cancel an
+# in-flight one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/travel-booking-backend:latest
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/travel-booking-frontend:latest
+
+jobs:
+
+  # ── 1. Backend lint + tests ──────────────────────────────────────────────────
+  backend-test:
+    name: Lint & Test Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+
+    # Throwaway datastores for the duration of the job. Reached over localhost
+    # here, unlike the deployed stack where they are service names on a bridge.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: booking_user
+          POSTGRES_PASSWORD: booking_password
+          POSTGRES_DB: booking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U booking_user -d booking_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://booking_user:booking_password@localhost:5432/booking_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-secret
+      JWT_REFRESH_SECRET: ci-test-refresh-secret
+      CORS_ORIGIN: http://localhost:5173
+      EMAIL_PROVIDER: console
+      PAYMENT_GATEWAY: mock
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+      - name: Run tests
+        run: npm test
+
+  # ── 2. Frontend lint + tests ─────────────────────────────────────────────────
+  frontend-test:
+    name: Lint & Test Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+  # ── 3. Build Docker images and push to GHCR ──────────────────────────────────
+  # The images are the build artefact of the tests above, so nothing is pushed
+  # to the registry until both jobs are green. Skipped entirely on pull
+  # requests -- a PR gets the test gate and stops there.
+  build:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [backend-test, frontend-test]
+    if: github.event_name != 'pull_request'
+
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Deployments reference an immutable commit-SHA tag, so what is running is
+      # unambiguous and a rollback is this same workflow re-run with an older
+      # tag. `latest` is published for convenience and is never what the deploy
+      # pins to.
+      - name: Resolve image tag
+        id: tag
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then TAG="$GITHUB_SHA"; fi
+          echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "redeploy=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Redeploying existing tag $TAG — skipping build."
+          else
+            echo "redeploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+          docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Pull previous images for layer cache
+        if: steps.tag.outputs.redeploy != 'true'
+        run: |
+          docker pull ${{ env.BACKEND_IMAGE }}  || true
+          docker pull ${{ env.FRONTEND_IMAGE }} || true
+
+      # BUILDKIT_INLINE_CACHE bakes the cache manifest into the pushed image,
+      # which is what makes --cache-from hit anything on the next run. Without
+      # it the pull above is wasted work.
+      - name: Build backend image
+        if: steps.tag.outputs.redeploy != 'true'
+        run: |
+          DOCKER_BUILDKIT=1 docker build \
+            --target production \
+            --cache-from ${{ env.BACKEND_IMAGE }} \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${{ env.BACKEND_IMAGE }} \
+            -t ghcr.io/${{ github.repository_owner }}/travel-booking-backend:${{ steps.tag.outputs.image_tag }} \
+            ./backend
+
+      # BACKEND_ORIGIN is baked in because `output: 'standalone'` freezes
+      # next.config.js rewrites at build time. In production nginx intercepts
+      # /api/* before it ever reaches Next, so this is only a fallback for
+      # anything that talks to the container directly.
+      - name: Build frontend image
+        if: steps.tag.outputs.redeploy != 'true'
+        run: |
+          DOCKER_BUILDKIT=1 docker build \
+            --target production \
+            --cache-from ${{ env.FRONTEND_IMAGE }} \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --build-arg BACKEND_ORIGIN=http://backend:4000 \
+            -t ${{ env.FRONTEND_IMAGE }} \
+            -t ghcr.io/${{ github.repository_owner }}/travel-booking-frontend:${{ steps.tag.outputs.image_tag }} \
+            ./frontend
+
+      # Both :latest and :<sha> go up; the deploy pins to :<sha>.
+      - name: Push images to GHCR
+        if: steps.tag.outputs.redeploy != 'true'
+        run: |
+          docker push --all-tags ghcr.io/${{ github.repository_owner }}/travel-booking-backend
+          docker push --all-tags ghcr.io/${{ github.repository_owner }}/travel-booking-frontend
+
+      # Fails fast if a manual redeploy names a tag that was never published,
+      # rather than discovering it mid-rollout on the instance.
+      - name: Verify both images exist in GHCR
+        run: |
+          for repo in travel-booking-backend travel-booking-frontend; do
+            image="ghcr.io/${{ github.repository_owner }}/$repo:${{ steps.tag.outputs.image_tag }}"
+            echo "Checking $image"
+            docker manifest inspect "$image" > /dev/null
+          done
+
+      - name: Open GitHub issue on build failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Build failed — commit ${context.sha.slice(0, 7)}`,
+              body: [
+                `**Workflow:** \`${context.workflow}\``,
+                `**Run:** [#${context.runNumber}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+                `**Branch:** \`${context.ref}\``,
+                `**Actor:** @${context.actor}`,
+                `**Commit:** \`${context.sha}\``,
+              ].join('\n')
+            })
+
+  # ── 4. Verify required EC2 secrets are present ───────────────────────────────
+  check-secrets:
+    name: Verify EC2 Secrets
+    runs-on: ubuntu-latest
+    needs: build
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+      image_tag: ${{ needs.build.outputs.image_tag }}
+
+    steps:
+      - name: Check secrets
+        id: check
+        # Passed through env rather than interpolated into the script body:
+        # PRIVATE_KEY is a multi-line PEM, and pasting it straight into a
+        # [[ -n "..." ]] test breaks the shell syntax outright.
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          AWS_EC2_IP_ADDRESS: ${{ secrets.AWS_EC2_IP_ADDRESS }}
+          AWS_HOST_USER: ${{ secrets.AWS_HOST_USER }}
+        run: |
+          if [[ -n "$PRIVATE_KEY" && -n "$AWS_EC2_IP_ADDRESS" && -n "$AWS_HOST_USER" ]]; then
+            echo "ready=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::One or more EC2 secrets are missing — deploy skipped."
+          fi
+
+  # ── 5. Deploy to AWS EC2 ─────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to AWS EC2
+    runs-on: ubuntu-latest
+    needs: check-secrets
+    if: needs.check-secrets.outputs.ready == 'true'
+    timeout-minutes: 20
+    environment: production # lets you require an approval before anything ships
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # NOTE: a password containing @ : / or ? must be percent-encoded here,
+      # since it is embedded in a URL.
+      - name: Write .env for EC2
+        run: |
+          mkdir -p app/nginx
+          cat > app/.env << 'EOF'
+          NODE_ENV=production
+          PORT=4000
+          API_PREFIX=/api/v1
+
+          # Pinned to the commit SHA, never :latest -- what is running on the
+          # instance is then always traceable to one build.
+          BACKEND_IMAGE=ghcr.io/${{ github.repository_owner }}/travel-booking-backend:${{ needs.check-secrets.outputs.image_tag }}
+          FRONTEND_IMAGE=ghcr.io/${{ github.repository_owner }}/travel-booking-frontend:${{ needs.check-secrets.outputs.image_tag }}
+
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          DATABASE_URL=postgresql://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/${{ secrets.POSTGRES_DB }}?schema=public
+
+          REDIS_URL=redis://redis:6379
+
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRES_IN=15m
+          JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}
+          JWT_REFRESH_EXPIRES_IN=7d
+
+          # Same-origin in production (Next proxies /api), so this only matters
+          # if you later point a separate domain at the API.
+          CORS_ORIGIN=http://${{ secrets.AWS_EC2_IP_ADDRESS }}
+
+          BOOKING_HOLD_MINUTES=10
+          FILE_STORAGE_DRIVER=local
+          PAYMENT_GATEWAY=${{ secrets.PAYMENT_GATEWAY || 'mock' }}
+
+          EMAIL_PROVIDER=${{ secrets.EMAIL_PROVIDER || 'console' }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_PORT=${{ secrets.SMTP_PORT || '587' }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM=${{ secrets.SMTP_FROM || '"Global Travel Agency <no-reply@example.com>"' }}
+
+          SMS_PROVIDER=${{ secrets.SMS_PROVIDER || 'none' }}
+          WHATSAPP_PROVIDER=${{ secrets.WHATSAPP_PROVIDER || 'none' }}
+          EOF
+
+      # The production compose file lives here rather than in the repo so there
+      # is only one YAML file to maintain. Note what is NOT published: Postgres,
+      # Redis, the backend and the Next server all have no `ports:` at all.
+      # nginx is the single ingress.
+      - name: Write docker-compose.prod.yml for EC2
+        run: |
+          cat > app/docker-compose.prod.yml << 'EOF'
+          name: travel-booking
+
+          services:
+            postgres:
+              image: postgres:16-alpine
+              container_name: booking_postgres
+              restart: unless-stopped
+              environment:
+                POSTGRES_USER: ${POSTGRES_USER}
+                POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+                POSTGRES_DB: ${POSTGRES_DB}
+              volumes:
+                - postgres_data:/var/lib/postgresql/data
+              healthcheck:
+                test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+                interval: 5s
+                timeout: 5s
+                retries: 10
+              networks:
+                - booking_network
+
+            redis:
+              image: redis:7-alpine
+              container_name: booking_redis
+              restart: unless-stopped
+              volumes:
+                - redis_data:/data
+              healthcheck:
+                test: ['CMD', 'redis-cli', 'ping']
+                interval: 5s
+                timeout: 5s
+                retries: 10
+              networks:
+                - booking_network
+
+            backend:
+              image: ${BACKEND_IMAGE}
+              container_name: booking_backend
+              restart: unless-stopped
+              env_file:
+                - .env
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                redis:
+                  condition: service_healthy
+              healthcheck:
+                test: ['CMD', 'node', '-e', "fetch('http://localhost:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+                interval: 10s
+                timeout: 5s
+                retries: 10
+                start_period: 15s
+              volumes:
+                - backend_uploads:/app/uploads
+                - backend_logs:/app/logs
+              networks:
+                - booking_network
+
+            frontend:
+              image: ${FRONTEND_IMAGE}
+              container_name: booking_frontend
+              restart: unless-stopped
+              depends_on:
+                backend:
+                  condition: service_healthy
+              # No published port: nginx reaches it over the internal network.
+              healthcheck:
+                test: ['CMD', 'node', '-e', "fetch('http://localhost:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+                interval: 10s
+                timeout: 5s
+                retries: 10
+                start_period: 15s
+              networks:
+                - booking_network
+
+            nginx:
+              image: nginx:1.27-alpine
+              container_name: booking_nginx
+              restart: unless-stopped
+              depends_on:
+                backend:
+                  condition: service_healthy
+                frontend:
+                  condition: service_healthy
+              # The whole public surface of the instance. Lock the security
+              # group to 80 (and 22 for this workflow's SSH).
+              ports:
+                - '80:80'
+              volumes:
+                - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+              healthcheck:
+                # 127.0.0.1, not localhost: busybox wget tries ::1 first and
+                # `listen 80` binds IPv4 only, so the probe is refused and the
+                # container is marked unhealthy while it is serving fine.
+                test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/healthz']
+                interval: 15s
+                timeout: 5s
+                retries: 5
+                start_period: 10s
+              networks:
+                - booking_network
+
+          networks:
+            booking_network:
+              driver: bridge
+
+          volumes:
+            postgres_data:
+            redis_data:
+            backend_uploads:
+            backend_logs:
+          EOF
+
+      - name: Write nginx reverse-proxy vhost for EC2
+        run: |
+          cat > app/nginx/default.conf << 'EOF'
+          upstream api_upstream {
+              server backend:4000;
+              keepalive 16;
+          }
+
+          upstream app_upstream {
+              server frontend:5173;
+              keepalive 16;
+          }
+
+          server {
+              listen 80;
+              server_name _;
+
+              # Matches the backend's own limit for document/image uploads.
+              client_max_body_size 20m;
+
+              # nginx's version banner tells an attacker which CVEs to try.
+              server_tokens off;
+
+              add_header X-Content-Type-Options nosniff always;
+              add_header X-Frame-Options SAMEORIGIN always;
+              add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+              gzip on;
+              gzip_proxied any;
+              gzip_comp_level 5;
+              gzip_min_length 512;
+              gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+              # Liveness for the container healthcheck. Deliberately answered by
+              # nginx itself: probing a proxied route instead would mark nginx
+              # unhealthy whenever an upstream blipped, and restart the one
+              # container that was still working.
+              location = /healthz {
+                  access_log off;
+                  add_header Content-Type text/plain;
+                  return 200 "ok\n";
+              }
+
+              # Everything the browser needs is same-origin, so there is no CORS
+              # preflight anywhere in the app.
+              location /api/ {
+                  proxy_pass         http://api_upstream;
+                  proxy_http_version 1.1;
+                  proxy_set_header   Connection "";
+                  proxy_set_header   Host $host;
+                  proxy_set_header   X-Real-IP $remote_addr;
+                  proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header   X-Forwarded-Proto $scheme;
+                  proxy_read_timeout 60s;
+              }
+
+              # Next emits content-hashed filenames under /_next/static, so a
+              # given URL's bytes never change and can be cached indefinitely.
+              location /_next/static/ {
+                  proxy_pass         http://app_upstream;
+                  proxy_http_version 1.1;
+                  proxy_set_header   Connection "";
+                  proxy_set_header   Host $host;
+                  # Next sends its own Cache-Control here; without hiding it the
+                  # response would carry two conflicting values.
+                  proxy_hide_header  Cache-Control;
+                  add_header         Cache-Control "public, max-age=31536000, immutable" always;
+              }
+
+              location / {
+                  proxy_pass         http://app_upstream;
+                  proxy_http_version 1.1;
+                  proxy_set_header   Host $host;
+                  proxy_set_header   X-Real-IP $remote_addr;
+                  proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header   X-Forwarded-Proto $scheme;
+                  # Next streams RSC payloads and uses a websocket in dev; both
+                  # need the connection left upgradable.
+                  proxy_set_header   Upgrade $http_upgrade;
+                  proxy_set_header   Connection $connection_upgrade;
+                  proxy_read_timeout 60s;
+                  proxy_buffering    off;
+              }
+          }
+          EOF
+
+          # `map` must sit at http level, not inside server{}, so it goes in the
+          # same conf.d file above the server block.
+          printf '%s\n%s\n' \
+            'map $http_upgrade $connection_upgrade { default upgrade; "" close; }' \
+            "$(cat app/nginx/default.conf)" > app/nginx/default.conf.tmp
+          mv app/nginx/default.conf.tmp app/nginx/default.conf
+
+      - name: Set up SSH agent
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+        run: |
+          mkdir -p ~/.ssh
+          ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+          ssh-keyscan -H ${{ secrets.AWS_EC2_IP_ADDRESS }} >> ~/.ssh/known_hosts
+          ssh-add - <<< "${{ secrets.PRIVATE_KEY }}"
+
+      - name: Ensure ~/app directory exists on EC2
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.AWS_HOST_USER }}@${{ secrets.AWS_EC2_IP_ADDRESS }} \
+            "mkdir -p ~/app/nginx"
+
+      - name: Copy files to EC2
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+        run: |
+          scp -o StrictHostKeyChecking=no \
+            app/.env \
+            app/docker-compose.prod.yml \
+            ${{ secrets.AWS_HOST_USER }}@${{ secrets.AWS_EC2_IP_ADDRESS }}:~/app/
+
+          scp -o StrictHostKeyChecking=no \
+            app/nginx/default.conf \
+            ${{ secrets.AWS_HOST_USER }}@${{ secrets.AWS_EC2_IP_ADDRESS }}:~/app/nginx/
+
+      - name: Deploy on EC2
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.AWS_HOST_USER }}@${{ secrets.AWS_EC2_IP_ADDRESS }} << 'ENDSSH'
+            set -euo pipefail
+            cd ~/app
+
+            set -a && source .env && set +a
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | \
+              docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # :latest moved server-side, so pull before anything is recreated.
+            docker pull "$BACKEND_IMAGE"
+            docker pull "$FRONTEND_IMAGE"
+
+            COMPOSE="docker compose --env-file=.env -f docker-compose.prod.yml"
+
+            # Datastores first: the migration needs a database to talk to, and
+            # it has to land before any container running the new code starts.
+            $COMPOSE up -d postgres redis
+
+            echo "Waiting for Postgres to accept connections..."
+            for _ in $(seq 1 30); do
+              if $COMPOSE exec -T postgres \
+                   pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+                echo "Postgres is ready."
+                break
+              fi
+              sleep 2
+            done
+
+            # One-off container on the new image — never the running backend,
+            # which may still be serving the previous release at this point.
+            echo "Applying database migrations..."
+            $COMPOSE run --rm --no-deps backend npx prisma migrate deploy
+
+            # A bad vhost would take the whole site down on restart, so it is
+            # checked before nginx is asked to use it.
+            echo "Validating nginx configuration..."
+            docker run --rm -v ~/app/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+              --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1 \
+              nginx:1.27-alpine nginx -t
+
+            $COMPOSE up -d --remove-orphans
+
+            # Reclaims image layers orphaned by the new SHA tags; without this a
+            # small instance fills its disk after a few dozen deploys.
+            docker image prune -f
+
+            docker logout ghcr.io
+            echo "Deploy complete."
+          ENDSSH
+
+      # Everything is behind nginx on port 80, so this doubles as a proxy test:
+      # a 200 on /api/v1/health means the vhost, the backend and the database
+      # are reachable, and a 200 on / means the Next upstream is too.
+      - name: Health check
+        run: |
+          BASE="http://${{ secrets.AWS_EC2_IP_ADDRESS }}"
+          API_STATUS=000
+          APP_STATUS=000
+
+          # Containers may still be settling right after `up -d`; retry rather
+          # than failing a deploy that is merely slow to warm up.
+          for attempt in $(seq 1 10); do
+            API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/api/v1/health" || echo "000")
+            APP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/" || echo "000")
+            if [[ "$API_STATUS" == "200" && "$APP_STATUS" == "200" ]]; then
+              break
+            fi
+            echo "Attempt $attempt: API $API_STATUS, app $APP_STATUS — retrying in 6s"
+            sleep 6
+          done
+
+          echo "Express API (via nginx): HTTP $API_STATUS"
+          echo "Next.js app (via nginx): HTTP $APP_STATUS"
+
+          if [[ "$API_STATUS" == "200" && "$APP_STATUS" == "200" ]]; then
+            echo "All health checks passed."
+          else
+            echo "Health check failed — inspect container logs on the instance:"
+            echo "  ssh <user>@${{ secrets.AWS_EC2_IP_ADDRESS }} 'cd ~/app && docker compose -f docker-compose.prod.yml logs --tail=100'"
+            exit 1
+          fi

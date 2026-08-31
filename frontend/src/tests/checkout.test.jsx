@@ -1,13 +1,13 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Route, Routes, useParams } from 'react-router-dom';
-import Checkout from '../pages/customer/Checkout.jsx';
+import Checkout from '../views/customer/Checkout.jsx';
 import * as bookingService from '../services/bookingService.js';
 import * as paymentService from '../services/paymentService.js';
 import * as customerService from '../services/customerService.js';
 import * as serviceService from '../services/serviceService.js';
 import { renderWithProviders, CUSTOMER_USER } from './testUtils.jsx';
 import { CHECKOUT_STATE, SERVICE_CATALOG } from './fixtures.js';
+import { readCheckoutDraft, saveCheckoutDraft } from '../lib/navState.js';
 
 vi.mock('../services/bookingService.js', () => ({
   list: vi.fn(),
@@ -44,20 +44,18 @@ vi.mock('../services/serviceService.js', () => ({
   remove: vi.fn(),
 }));
 
-function ConfirmationProbe() {
-  const { id } = useParams();
-  return <h1>Confirmation for {id}</h1>;
-}
-
+/**
+ * The room selection used to arrive as router state. It now comes from
+ * sessionStorage, so the test seeds it there before rendering -- exactly what
+ * HotelDetails does before navigating.
+ */
 function renderCheckout({ state = CHECKOUT_STATE, ...options } = {}) {
-  return renderWithProviders(
-    <Routes>
-      <Route path="/checkout" element={<Checkout />} />
-      <Route path="/hotels" element={<h1>Hotel search page</h1>} />
-      <Route path="/booking-confirmation/:id" element={<ConfirmationProbe />} />
-    </Routes>,
-    { user: CUSTOMER_USER, initialEntries: [{ pathname: '/checkout', state }], ...options }
-  );
+  if (state) saveCheckoutDraft(state);
+  return renderWithProviders(<Checkout />, {
+    user: CUSTOMER_USER,
+    pathname: '/checkout',
+    ...options,
+  });
 }
 
 /** Walks the wizard from the current step to the payment step. */
@@ -85,11 +83,11 @@ beforeEach(() => {
 describe('Checkout', () => {
   it('shows an empty state when no rooms were selected', async () => {
     const user = userEvent.setup();
-    renderCheckout({ state: null });
+    const { router } = renderCheckout({ state: null });
 
     expect(screen.getByText(/No rooms selected yet/i)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /browse hotels/i }));
-    expect(screen.getByRole('heading', { name: /hotel search page/i })).toBeInTheDocument();
+    expect(router.push).toHaveBeenCalledWith('/hotels');
   });
 
   it('renders the five checkout steps and starts on guest information', async () => {
@@ -167,7 +165,7 @@ describe('Checkout', () => {
 
   it('creates the booking, takes payment and lands on the confirmation page', async () => {
     const user = userEvent.setup();
-    renderCheckout();
+    const { router } = renderCheckout();
     await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Casey'));
 
     await user.click(screen.getByRole('button', { name: /^continue$/i }));
@@ -211,7 +209,8 @@ describe('Checkout', () => {
       gateway: 'mock',
     });
 
-    expect(await screen.findByRole('heading', { name: /confirmation for booking-1/i })).toBeInTheDocument();
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/booking-confirmation/booking-1'));
+    expect(readCheckoutDraft()).toBeNull();
   });
 
   it('sends one room per selected quantity when several rooms are booked', async () => {
@@ -260,7 +259,26 @@ describe('Checkout', () => {
     expect(screen.getByRole('heading', { name: 'Payment' })).toBeInTheDocument();
   });
 
-  it('still confirms the booking when the payment step fails', async () => {
+  it('stays on the payment step when the charge fails, instead of showing "Booking Received"', async () => {
+    // A created-but-unpaid booking used to land on the confirmation page, which
+    // read as success for something that had not been paid for.
+    paymentService.create.mockRejectedValue(new Error('Gateway declined'));
+    const user = userEvent.setup();
+    const { router } = renderCheckout();
+    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Casey'));
+
+    await advanceToPayment(user, 4);
+    await user.click(screen.getByRole('button', { name: /confirm & pay/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText(/payment not completed/i)).toBeInTheDocument();
+    expect(within(alert).getByText(/Gateway declined/i)).toBeInTheDocument();
+    // The booking exists and is held, so the customer is told which one.
+    expect(within(alert).getByText(/BK-2026-000001/)).toBeInTheDocument();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('does not let a failed payment be retried by re-booking the same rooms', async () => {
     paymentService.create.mockRejectedValue(new Error('Gateway declined'));
     const user = userEvent.setup();
     renderCheckout();
@@ -268,8 +286,43 @@ describe('Checkout', () => {
 
     await advanceToPayment(user, 4);
     await user.click(screen.getByRole('button', { name: /confirm & pay/i }));
+    await screen.findByRole('alert');
 
-    expect(await screen.findByText(/payment failed: Gateway declined/i)).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: /confirmation for booking-1/i })).toBeInTheDocument();
+    // Confirm & Pay is withdrawn: pressing it again would create a second
+    // booking. Retrying charges the booking that already exists.
+    expect(screen.queryByRole('button', { name: /confirm & pay/i })).not.toBeInTheDocument();
+    expect(bookingService.create).toHaveBeenCalledTimes(1);
+
+    paymentService.create.mockResolvedValue({ success: true, data: { id: 'pay-1', status: 'paid' } });
+    await user.click(screen.getByRole('button', { name: /retry payment/i }));
+
+    await waitFor(() => expect(paymentService.create).toHaveBeenCalledTimes(2));
+    expect(bookingService.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces a wallet gateway\u2019s approval step rather than reporting failure', async () => {
+    // PayPal/bKash/Nagad answer the first charge with an approval URL, not an
+    // error: the payer has to finish on the provider's page.
+    paymentService.create.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'pay-1',
+        status: 'failed',
+        metadata: { gatewayRaw: { requiresApproval: true, approvalUrl: 'https://provider/approve' } },
+      },
+    });
+    const user = userEvent.setup();
+    const { router } = renderCheckout();
+    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Casey'));
+
+    await advanceToPayment(user, 4);
+    await user.click(screen.getByRole('button', { name: /confirm & pay/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByRole('link', { name: /continue to provider/i })).toHaveAttribute(
+      'href',
+      'https://provider/approve'
+    );
+    expect(router.push).not.toHaveBeenCalled();
   });
 });

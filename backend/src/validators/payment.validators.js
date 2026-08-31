@@ -4,7 +4,7 @@ export const createPaymentSchema = z.object({
   bookingId: z.string().uuid(),
   amount: z.number().positive(),
   method: z.enum(['cash', 'bank_transfer', 'card', 'mobile_banking', 'online_gateway']),
-  gateway: z.enum(['mock', 'stripe', 'paypal']).optional(),
+  gateway: z.enum(['mock', 'stripe', 'paypal', 'bkash', 'nagad']).optional(),
   metadata: z.record(z.any()).optional(),
 });
 

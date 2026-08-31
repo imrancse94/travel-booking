@@ -1,3 +1,5 @@
+'use client';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePagination } from './usePagination.js';
 import { useDebounce } from './useDebounce.js';

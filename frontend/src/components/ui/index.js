@@ -1,8 +1,13 @@
+'use client';
+
 // Barrel export for the reusable admin UI component kit. Import from here
 // (e.g. `import { Button, Table, useToast } from '../components/ui';`)
 // rather than reaching into individual files.
 export { Button } from './Button.jsx';
 export { Input } from './Input.jsx';
+export { DateRangePicker } from './DateRangePicker.jsx';
+export { DestinationField } from './DestinationField.jsx';
+export { OccupancyField } from './OccupancyField.jsx';
 export { Select } from './Select.jsx';
 export { Textarea } from './Textarea.jsx';
 export { Card } from './Card.jsx';

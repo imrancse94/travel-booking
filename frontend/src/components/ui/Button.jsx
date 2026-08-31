@@ -1,3 +1,5 @@
+'use client';
+
 import './Button.css';
 
 const VARIANT_CLASS = {

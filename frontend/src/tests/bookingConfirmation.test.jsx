@@ -1,6 +1,5 @@
 import { screen } from '@testing-library/react';
-import { Route, Routes } from 'react-router-dom';
-import BookingConfirmation from '../pages/customer/BookingConfirmation.jsx';
+import BookingConfirmation from '../views/customer/BookingConfirmation.jsx';
 import * as bookingService from '../services/bookingService.js';
 import { renderWithProviders, CUSTOMER_USER } from './testUtils.jsx';
 import { CONFIRMED_BOOKING } from './fixtures.js';
@@ -17,11 +16,12 @@ vi.mock('../services/bookingService.js', () => ({
 
 function renderConfirmation() {
   return renderWithProviders(
-    <Routes>
-      <Route path="/booking-confirmation/:id" element={<BookingConfirmation />} />
-      <Route path="/my-bookings" element={<h1>My bookings page</h1>} />
-    </Routes>,
-    { user: CUSTOMER_USER, initialEntries: ['/booking-confirmation/booking-1'] }
+    <BookingConfirmation />,
+    {
+      user: CUSTOMER_USER,
+      pathname: '/booking-confirmation/booking-1',
+      params: { id: 'booking-1' },
+    }
   );
 }
 

@@ -1,9 +1,11 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { render } from '@testing-library/react';
 import { Provider } from 'react-redux';
-import { MemoryRouter } from 'react-router-dom';
 import authReducer from '../store/authSlice.js';
 import { ToastProvider } from '../components/ui/index.js';
+import { routerMock, setNavigation } from './navigationMock.js';
+
+export { routerMock, setNavigation };
 
 /**
  * Shared render helper for component tests.
@@ -52,19 +54,31 @@ export function makeStore(auth = {}) {
   });
 }
 
+/**
+ * `pathname`/`search`/`params` set what next/navigation reports to the tree,
+ * replacing what <MemoryRouter initialEntries> used to express. Assert
+ * navigation through the returned `router` spies.
+ */
 export function renderWithProviders(
   ui,
-  { user = null, isLoading = false, initialEntries = ['/'], store = makeStore({ user, isLoading }) } = {}
+  {
+    user = null,
+    isLoading = false,
+    pathname = '/',
+    search = '',
+    params = {},
+    store = makeStore({ user, isLoading }),
+  } = {}
 ) {
+  setNavigation({ pathname, search, params });
+
   function Wrapper({ children }) {
     return (
       <Provider store={store}>
-        <MemoryRouter initialEntries={initialEntries}>
-          <ToastProvider>{children}</ToastProvider>
-        </MemoryRouter>
+        <ToastProvider>{children}</ToastProvider>
       </Provider>
     );
   }
 
-  return { store, ...render(ui, { wrapper: Wrapper }) };
+  return { store, router: routerMock, ...render(ui, { wrapper: Wrapper }) };
 }

@@ -1,8 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Route, Routes } from 'react-router-dom';
-import HotelList from '../pages/admin/hotels/HotelList.jsx';
-import ServiceList from '../pages/admin/services/ServiceList.jsx';
+import HotelList from '../views/admin/hotels/HotelList.jsx';
+import ServiceList from '../views/admin/services/ServiceList.jsx';
 import * as hotelService from '../services/hotelService.js';
 import * as serviceService from '../services/serviceService.js';
 import { renderWithProviders, SUPER_ADMIN_USER } from './testUtils.jsx';
@@ -35,12 +34,7 @@ const HOTEL_ROWS = [
 const PAGINATION = { page: 1, limit: 20, total: 2, totalPages: 1 };
 
 function renderPage(element, path) {
-  return renderWithProviders(
-    <Routes>
-      <Route path={path} element={element} />
-    </Routes>,
-    { user: SUPER_ADMIN_USER, initialEntries: [path] }
-  );
+  return renderWithProviders(element, { user: SUPER_ADMIN_USER, pathname: path });
 }
 
 beforeEach(() => {
