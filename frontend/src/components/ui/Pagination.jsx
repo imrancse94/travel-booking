@@ -1,3 +1,5 @@
+'use client';
+
 import './Pagination.css';
 
 /** Page-number + prev/next pagination, driven by `{page,limit,total,totalPages}`. */

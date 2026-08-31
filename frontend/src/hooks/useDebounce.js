@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useState } from 'react';
 
 /** Returns `value`, delayed by `delay` ms after the last change. Use for search inputs so requests fire once typing pauses. */

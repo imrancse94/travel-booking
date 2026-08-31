@@ -1,4 +1,6 @@
-import { forwardRef } from 'react';
+'use client';
+
+import { forwardRef, useId } from 'react';
 import './FormField.css';
 
 /**
@@ -9,7 +11,8 @@ export const Select = forwardRef(function Select(
   { label, error, hint, options = [], placeholder, className = '', containerClassName = '', required, id, children, ...rest },
   ref
 ) {
-  const selectId = id || rest.name;
+  const generatedId = useId();
+  const selectId = id || rest.name || generatedId;
   return (
     <div className={`form-field ${containerClassName}`}>
       {label && (

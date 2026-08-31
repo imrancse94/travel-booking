@@ -6,9 +6,9 @@ A production-oriented hotel booking and travel agency management platform: hotel
 
 **Backend** — Node.js 20 LTS, Express, plain JavaScript (ES Modules, no TypeScript), Prisma ORM against PostgreSQL, Redis, JWT auth, Zod validation, Swagger/OpenAPI docs.
 
-**Frontend** — React 18, Vite, plain JavaScript (no TypeScript), React Router, Redux Toolkit (session state), Axios.
+**Frontend** — Next.js 16 (App Router), React 19, plain JavaScript (no TypeScript), Redux Toolkit (session state), Axios.
 
-**Infrastructure** — Docker (multi-stage builds), Docker Compose for local development, GitHub Actions for CI/CD, targeting AWS (ECR, ECS/Fargate, ALB, RDS PostgreSQL, ElastiCache Redis, S3, CloudWatch, Route 53) in production.
+**Infrastructure** — Docker (multi-stage builds), Docker Compose for local development and production, GitHub Actions for CI/CD, images on GHCR, deployed to a single AWS EC2 instance behind nginx, which reverse-proxies `/api/*` to the backend and everything else to the Next.js server. Port 80 is the only published port.
 
 See [`documentation/architecture.md`](documentation/architecture.md) for the full system design.
 
@@ -38,23 +38,35 @@ See [`documentation/architecture.md`](documentation/architecture.md) for the ful
 │   ├── Dockerfile
 │   └── package.json
 │
-├── frontend/                # React + Vite app
+├── frontend/                # Next.js (App Router) app
 │   ├── src/
 │   │   ├── components/     # reusable UI primitives
 │   │   ├── layouts/        # admin shell, customer shell
-│   │   ├── pages/          # route-level pages
-│   │   ├── features/       # feature-based modules
-│   │   ├── routes/         # React Router trees + protected routes
-│   │   ├── services/       # API call modules
+│   │   ├── pages/          # route-level pages, grouped admin/ + customer/ + auth/
+│   │   ├── app/            # App Router route tree (layouts + page.jsx)
+│   │   ├── views/          # page components the routes render
+│   │   ├── services/       # API call modules (one per resource)
+│   │   ├── store/          # Redux Toolkit store + auth slice
+│   │   ├── contexts/       # AuthProvider + useAuth()
+│   │   ├── hooks/          # useResourceList, usePermission, usePagination, useDebounce
+│   │   ├── constants/      # nav config, select options
+│   │   ├── utils/          # formatting helpers
+│   │   ├── styles/         # global CSS + design tokens
+│   │   ├── tests/          # Vitest suites, shared render helper + fixtures
 │   │   ├── lib/            # ApiClient wrapper around axios
 │   │   ├── App.jsx
 │   │   └── main.jsx
+│   ├── public/             # favicon and other static assets
 │   ├── Dockerfile
 │   └── package.json
 │
-├── .github/workflows/       # ci.yml, deploy.yml
+├── .github/
+│   ├── workflows/main.yml   # test -> build -> deploy to EC2, the only workflow
+│   └── scripts/smoke.sh     # end-to-end checks, run by `make smoke`
 ├── documentation/           # architecture, database, api, booking-flow, development, deployment
 ├── docker-compose.yml
+├── pgadmin.servers.json     # pgAdmin's pre-registered dev database connection
+├── Makefile                 # command runner for everything above (`make help`)
 └── .gitignore
 ```
 
@@ -63,28 +75,54 @@ Note: the top-level application folders are lowercase `backend/` and `frontend/`
 ## Quick start
 
 ```bash
+make setup
+```
+
+That copies both `.env` files from their `.env.example` templates, builds the
+images, starts the stack, waits for every service to report healthy, and seeds
+demo data. The equivalent by hand:
+
+```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 
 docker compose up --build
-```
-
-Database migrations run automatically when the backend container starts (`npx prisma migrate deploy`, part of its Compose start command). To load demo data:
-
-```bash
 docker compose exec backend npm run seed
 ```
 
-Full setup, testing, linting, and Prisma Studio instructions are in [`documentation/development.md`](documentation/development.md).
+Database migrations run automatically when the backend container starts (`npx prisma migrate deploy`, part of its Compose start command).
+
+### Common commands
+
+`make help` lists every target. The ones used most:
+
+| Command | What it does |
+|---|---|
+| `make up` / `make down` | start (detached, wait for healthy) / stop the stack |
+| `make dev` | start in the foreground with logs attached |
+| `make logs` | follow logs from all services |
+| `make seed` | load demo data (idempotent) |
+| `make migrate` / `make migrate-new name=add_x` | apply / create migrations |
+| `make test` / `make lint` | both test suites / both linters |
+| `make smoke` | end-to-end checks against the running stack |
+| `make psql` / `make sh-backend` | database shell / container shell |
+| `make build` | build the production Docker images |
+| `make clean` | remove containers **and** database volumes |
+
+Full setup, testing, linting, pgAdmin and Prisma Studio instructions are in [`documentation/development.md`](documentation/development.md).
 
 ## Default URLs
 
 | What | URL |
 |---|---|
-| Frontend | http://localhost:5173 |
+| Frontend (customer site) | http://localhost:5173 |
+| Admin console | http://localhost:5173/admin |
+| Sign in (staff + customers) | http://localhost:5173/login |
 | Backend API | http://localhost:4000/api/v1 |
 | API docs (Swagger UI, dev only) | http://localhost:4000/api-docs |
 | Health check | http://localhost:4000/api/v1/health |
+| pgAdmin (dev only) | http://localhost:5050 |
+| Mailpit inbox (dev only) | http://localhost:8026 |
 
 ## Development-only credentials
 
@@ -109,9 +147,9 @@ Full setup, testing, linting, and Prisma Studio instructions are in [`documentat
 This project is under active, incremental development across several concurrent workstreams. As of this writing:
 
 - **Backend API**: every resource module under `backend/src/routes/` (auth, users, roles, hotels, room types, rooms, amenities, rate plans, availability, bookings, customers, services, payments, refunds, invoices, destinations, tours, transport, commissions, reports, dashboard, notifications, settings, uploads) has real controller/service implementations — none are placeholder stubs. Booking creation accepts either a specific `roomId` or a `roomTypeId` (the server auto-assigns and locks an available room of that type — what the customer-facing checkout uses, since customers are never shown raw room numbers), and every list/detail/payment/invoice endpoint a `Customer`-role user can reach is scoped to their own records server-side. See `documentation/api.md` for the full route table.
-- **Automated tests**: the backend has 46 passing tests (`backend/tests/unit` + `backend/tests/integration`, run with `npm test`) covering auth, RBAC/permission checks, hotel CRUD, availability search, the full booking lifecycle (creation, cancellation-fee tiers, check-in/out), payments, invoices, refunds, and — the single most critical scenario in the brief — concurrent double-booking prevention, verified by firing real simultaneous requests against the same room and the same room type and asserting exactly the right number succeed. The frontend does not yet have committed test files, even though `npm test` is wired up in `package.json` and CI is configured to run it.
-- **Frontend UI**: the React application has a full admin console (`/admin/*` — dashboard, bookings, hotels, rooms/room-types/rate-plans, customers, tours, destinations, transport, payments, invoices, commissions, reports, users, roles & permissions, settings) and the complete customer-facing flow (home search, hotel details + room selection, multi-step checkout with guest info/room summary/additional services/price summary/payment, booking confirmation, my bookings, my invoices, profile) plus auth pages (login, register, forgot/reset password), all built on a shared reusable UI kit (`frontend/src/components/ui/`). There is no admin management page yet for the extra-services catalog (`/services`) — the catalog itself is seeded and fully usable from the customer checkout, just not editable from the admin UI.
-- **SMS / WhatsApp notifications**: the provider abstraction exists (`backend/src/integrations/sms/`, `backend/src/integrations/whatsapp/`) and is wired into the notification fan-out service, but no real provider is implemented yet — both are no-op stubs gated by `SMS_PROVIDER=none`/`WHATSAPP_PROVIDER=none`.
-- **Payment gateway**: only the `mock` gateway is implemented (`PAYMENT_GATEWAY=mock`); Stripe/PayPal/local gateway adapters are reserved extension points that currently throw "not implemented yet".
+- **Automated tests**: the backend has 68 passing tests (`backend/tests/unit` + `backend/tests/integration`, run with `make test-backend`) covering auth, RBAC/permission checks, hotel CRUD, availability search, the full booking lifecycle (creation, cancellation-fee tiers, check-in/out), payments, invoices, refunds, and — the single most critical scenario in the brief — concurrent double-booking prevention, verified by firing real simultaneous requests against the same room and the same room type and asserting exactly the right number succeed. The frontend has 84 passing Vitest + Testing Library tests (`frontend/src/tests`, run with `make test-frontend`) covering login, the auth and permission gates, hotel search, hotel details, room selection, the five-step checkout (including the exact payload it POSTs and the payment/booking failure paths) and the booking confirmation page.
+- **Frontend UI**: the React application has a full admin console (`/admin/*` — dashboard, bookings, hotels, rooms/room-types/rate-plans, customers, tours, destinations, transport, payments, invoices, commissions, reports, users, roles & permissions, settings) and the complete customer-facing flow (home search, hotel details + room selection, multi-step checkout with guest info/room summary/additional services/price summary/payment, booking confirmation, my bookings, my invoices, profile) plus the extra-services catalog (`/admin/services`) and auth pages (login, register, forgot/reset password), all built on a shared reusable UI kit (`frontend/src/components/ui/`).
+- **SMS / WhatsApp notifications**: the provider abstraction exists (`backend/src/integrations/sms/`, `backend/src/integrations/whatsapp/`) and is wired into the notification fan-out service, with two providers each: `none` (channel disabled — the default) and `console` (development provider that logs the message). No real gateway is implemented yet; adding Twilio, the Meta Cloud API or a local Bangladesh gateway means one `case` plus a provider factory in that one file.
+- **Payment gateways**: five adapters, each its own class extending `PaymentGateway` — `mock` (default, always succeeds, no credentials), `stripe` (cards, charged server-side in one call), and the buyer-approved wallets `paypal`, `bkash` and `nagad`. Sandbox credentials come from env constants and every provider defaults to its sandbox host; a gateway with missing credentials is refused at resolve time with a message naming the absent variable. Only `mock` is exercised end to end in CI — the live adapters are unit-tested against mocked transports, not against the providers' sandboxes.
 
 This section reflects the state of the repository at the time it was last updated — check the codebase directly for anything that may have since changed.

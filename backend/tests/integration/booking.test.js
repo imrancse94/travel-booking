@@ -140,6 +140,20 @@ describe('booking lifecycle', () => {
     expect(res.status).toBe(422);
   });
 
+  it('rejects an availability search whose check-out is not after check-in', async () => {
+    const { hotel } = await createBookableHotel({ price: 100 });
+
+    const res = await request(app).get('/api/v1/rooms/availability').query({
+      hotelId: hotel.id,
+      checkIn: '2030-02-10',
+      checkOut: '2030-02-08',
+      adults: 1,
+    });
+
+    expect(res.status).toBe(422);
+    expect(res.body.success).toBe(false);
+  });
+
   it('applies a 100% cancellation fee inside the 24-hour window and a free cancellation far out', async () => {
     const { hotel, roomType } = await createBookableHotel({ price: 100 });
 
@@ -161,6 +175,10 @@ describe('booking lifecycle', () => {
       .send({ reason: 'change of plans' });
     expect(cancelFarOut.status).toBe(200);
     expect(cancelFarOut.body.data.cancellationFee).toBe('0');
+    // The response must reflect the cancellation it just performed, not the
+    // pre-cancellation row.
+    expect(cancelFarOut.body.data.status).toBe('cancelled');
+    expect(cancelFarOut.body.data.cancelledAt).toBeTruthy();
   });
 
   it('an admin can confirm a held booking, then check the guest in and out', async () => {

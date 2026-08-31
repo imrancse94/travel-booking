@@ -1,3 +1,5 @@
+'use client';
+
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartTooltip } from './ChartTooltip.jsx';
 import { CATEGORICAL_COLORS, CHART_GRID_COLOR, CHART_TEXT_COLOR } from './chartTheme.js';

@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma.js';
+import logger from '../config/logger.js';
 import { ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
 import { Money, sum, roundCurrency } from '../utils/money.js';
 import { env } from '../config/env.js';
@@ -312,7 +313,7 @@ async function transitionStatus(tx, booking, toStatus, { changedById, reason } =
 }
 
 export async function confirmBookingAfterPayment(bookingId, { changedById } = {}) {
-  return prisma.$transaction(async (tx) => {
+  const confirmed = await prisma.$transaction(async (tx) => {
     const booking = await tx.booking.findUnique({ where: { id: bookingId }, include: { customer: true, hotel: true } });
     if (!booking) throw new NotFoundError('Booking not found');
     if (!['held', 'pending'].includes(booking.status)) {
@@ -321,6 +322,35 @@ export async function confirmBookingAfterPayment(bookingId, { changedById } = {}
     await transitionStatus(tx, booking, 'confirmed', { changedById, reason: 'Payment received' });
     return { ...booking, status: 'confirmed' };
   });
+
+  // A website booking is created `held` and only becomes `confirmed` here, so
+  // createBooking's `status === 'confirmed'` check never fires for it -- which
+  // meant the bookingConfirmation template had never once been sent and the
+  // customer only ever received a payment receipt, with no itinerary.
+  //
+  // Sent after the transaction commits: an email dispatched inside it would go
+  // out even if the commit were later rolled back.
+  if (confirmed.customer?.email) {
+    await notify({
+      userId: confirmed.customer.userId || changedById,
+      event: 'booking.confirmed',
+      title: 'Booking confirmed',
+      message: `Your booking ${confirmed.bookingNumber} is confirmed.`,
+      emailTemplate: 'bookingConfirmation',
+      emailTo: confirmed.customer.email,
+      emailData: {
+        firstName: confirmed.customer.firstName,
+        bookingNumber: confirmed.bookingNumber,
+        hotelName: confirmed.hotel?.name,
+        checkIn: confirmed.checkIn.toISOString().slice(0, 10),
+        checkOut: confirmed.checkOut.toISOString().slice(0, 10),
+        totalAmount: confirmed.totalAmount.toString(),
+        currency: confirmed.currency,
+      },
+    }).catch((err) => logger.error({ err, bookingId }, 'Failed to send booking confirmation email'));
+  }
+
+  return confirmed;
 }
 
 export async function releaseExpiredHolds() {
@@ -373,7 +403,10 @@ export async function cancelBooking(bookingId, { reason, changedById } = {}) {
 
     const { cancellationFee, refundableAmount } = await calculateCancellation(booking, settings);
 
-    await tx.booking.update({
+    // Return the *updated* row (not the pre-update `booking`), so the API
+    // response reflects the cancelled status/cancelledAt the caller just
+    // caused -- same pattern as checkInBooking/checkOutBooking below.
+    const cancelled = await tx.booking.update({
       where: { id: bookingId },
       data: {
         status: 'cancelled',
@@ -382,12 +415,13 @@ export async function cancelBooking(bookingId, { reason, changedById } = {}) {
         refundableAmount: refundableAmount.toString(),
         cancellationReason: reason,
       },
+      include: { customer: true },
     });
     await tx.bookingStatusHistory.create({
       data: { bookingId, fromStatus: booking.status, toStatus: 'cancelled', changedById, reason },
     });
 
-    return { ...booking, cancellationFee, refundableAmount };
+    return { ...cancelled, cancellationFee, refundableAmount };
   });
 
   await recordAudit({ userId: changedById, action: 'booking.cancelled', entity: 'Booking', entityId: bookingId, newValue: { reason } });

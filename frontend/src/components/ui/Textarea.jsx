@@ -1,4 +1,6 @@
-import { forwardRef } from 'react';
+'use client';
+
+import { forwardRef, useId } from 'react';
 import './FormField.css';
 
 /** Multi-line text input with label + error-message support. */
@@ -6,7 +8,8 @@ export const Textarea = forwardRef(function Textarea(
   { label, error, hint, className = '', containerClassName = '', required, id, rows = 4, ...rest },
   ref
 ) {
-  const textareaId = id || rest.name;
+  const generatedId = useId();
+  const textareaId = id || rest.name || generatedId;
   return (
     <div className={`form-field ${containerClassName}`}>
       {label && (

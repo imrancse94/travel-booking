@@ -6,6 +6,7 @@ export const ADMIN_NAV_ITEMS = [
   { label: 'Dashboard', to: '/admin/dashboard', icon: '\u{1F3E0}', permission: null },
   { label: 'Bookings', to: '/admin/bookings', icon: '\u{1F4D6}', permission: 'bookings.view' },
   { label: 'Hotels', to: '/admin/hotels', icon: '\u{1F3E8}', permission: 'hotels.view' },
+  { label: 'Services', to: '/admin/services', icon: '\u{1F6CE}️', permission: 'services.view' },
   { label: 'Rooms', to: '/admin/rooms/room-types', icon: '\u{1F6CF}️', permission: 'room_types.view' },
   { label: 'Customers', to: '/admin/customers', icon: '\u{1F465}', permission: 'customers.view' },
   { label: 'Tours', to: '/admin/tours/packages', icon: '\u{1F9F3}', permission: 'tours.view' },
@@ -24,6 +25,7 @@ const SECTION_LABELS = {
   dashboard: 'Dashboard',
   bookings: 'Bookings',
   hotels: 'Hotels',
+  services: 'Extra Services',
   rooms: 'Rooms',
   'room-types': 'Room Types',
   'rate-plans': 'Rate Plans',
@@ -63,5 +65,12 @@ export function getBreadcrumbTrail(pathname) {
     const label = SECTION_LABELS[seg] || humanize(seg);
     trail.push(isLast ? { label } : { label, to: cumulative });
   });
-  return trail;
+
+  // Some paths repeat a label: /admin/dashboard is the Dashboard root followed
+  // by the Dashboard segment, and /admin/rooms/rooms is the Rooms section
+  // followed by the Rooms page. Both rendered "Dashboard / Dashboard" and
+  // tripped React's duplicate-key warning. Keep the LATER entry of any
+  // consecutive pair, since the last item is the current page and correctly
+  // carries no link.
+  return trail.filter((item, i) => item.label !== trail[i + 1]?.label);
 }

@@ -13,7 +13,8 @@ Both applications live in one repository so they can be versioned, tested, and d
 Browser (admin / customer)
         |
         v
-   frontend (React + Vite, served by nginx in production)
+   nginx (reverse proxy: /api/* -> backend, everything else -> frontend)
+   frontend (Next.js App Router)
         |  HTTPS, /api/v1/*
         v
    backend (Express API)
@@ -22,7 +23,7 @@ Browser (admin / customer)
         +--> Redis (cache / rate limiting support)
         +--> SMTP / console (email)
         +--> S3 / local disk (file storage)
-        +--> payment gateway adapter (mock in dev)
+        +--> payment gateway adapter (mock | stripe | paypal | bkash | nagad)
 ```
 
 ## 2. Technology stack
@@ -37,8 +38,8 @@ Browser (admin / customer)
 
 **Frontend**
 - React 18, plain JavaScript (no TypeScript)
-- Vite for dev server and production build
-- React Router for client-side routing
+- Next.js 16 (App Router) for routing, dev server and production build
+- File-based routing under `src/app`; pages are client components (the access token is in memory, so the server cannot know the session)
 - Axios (wrapped by `ApiClient`) for HTTP calls
 - Vitest + Testing Library for tests
 
@@ -48,7 +49,7 @@ Browser (admin / customer)
 **Infrastructure**
 - Docker multi-stage builds for both apps, Docker Compose for local development
 - GitHub Actions for CI and CD
-- AWS (ECR, ECS/Fargate, ALB, RDS, ElastiCache, S3, CloudWatch, Route 53) for production — see `deployment.md`
+- A single AWS EC2 instance running Docker Compose for production, with images on GHCR — see `deployment.md`
 
 ## 3. Backend layered architecture
 
@@ -115,9 +116,19 @@ At login, the backend resolves a user's roles and the union of their permissions
 Following the "never hard-code an external provider" rule, three integration points are built as small pluggable adapters under `backend/src/integrations/`, each selected by an environment variable so the system stays fully runnable in local development with zero external accounts:
 
 - **Email** (`integrations/email/providers/`) — `consoleProvider.js` (default in development: logs the email instead of sending it) and `smtpProvider.js` (real SMTP via the `MailTransport` wrapper), selected by `EMAIL_PROVIDER=console|smtp`. Templates live in `integrations/email/emailTemplates.js` and are rendered by `services/emailService.js`.
-- **SMS / WhatsApp** (`integrations/sms/smsProvider.js`, `integrations/whatsapp/whatsappProvider.js`) — currently a no-op stub gated by `SMS_PROVIDER=none` / `WHATSAPP_PROVIDER=none` that logs and returns `{ skipped: true }`; wiring in Twilio, Vonage, or a local gateway later is a one-file change with the same function shape.
-- **Payment gateway** (`integrations/payment/paymentGateway.js`) — `resolvePaymentGateway(name)` returns an adapter shaped `{ name, async charge({ amount, currency, method, metadata }) }`. Only `mock` (`providers/mockGateway.js`) is implemented today; `stripe`/`paypal` are reserved switch cases that throw a clear "not implemented yet" error until a real adapter is added, selected by `PAYMENT_GATEWAY=mock|stripe|paypal`.
-- **Notifications** (`notifications/notificationService.js`) — `notify(...)` is the single fan-out point for every business event (booking created, cancelled, etc.): it always writes an in-app `Notification` row, and optionally sends an email when an `emailTemplate` is supplied. SMS/WhatsApp dispatch (`notifySms`, `notifyWhatsapp`) is wired through the same module for a consistent call shape once those providers exist.
+- **SMS / WhatsApp** (`integrations/sms/smsProvider.js`, `integrations/whatsapp/whatsappProvider.js`) — same provider-selection shape as email: `SMS_PROVIDER`/`WHATSAPP_PROVIDER` pick between `none` (channel disabled, returns `{ skipped: true }` — the default) and `console` (development provider that logs the message instead of sending it, so the channel is exercisable locally). Wiring in Twilio, Vonage, the Meta Cloud API, or a local Bangladesh gateway is a one-file change that adds a `case` and a provider factory; no caller changes.
+- **Payment gateways** (`integrations/payment/`) — `resolvePaymentGateway(name)` returns an adapter shaped `{ name, async charge({ amount, currency, method, metadata }) }`, selected by `PAYMENT_GATEWAY` or per-request `gateway`. Each provider is its own class in `providers/` extending the `PaymentGateway` base:
+
+  | Gateway | Flow | Notes |
+  |---|---|---|
+  | `MockGateway` | one call, always succeeds | default; no credentials; what CI runs |
+  | `StripeGateway` | PaymentIntent create + confirm | official SDK; 3-D Secure is reported, never auto-completed |
+  | `PayPalGateway` | create order → approve → capture | Orders v2 |
+  | `BkashGateway` | create → approve → execute | tokenized checkout; BDT only |
+  | `NagadGateway` | initialize → approve → verify | RSA-signed and -encrypted; BDT only |
+
+  A declined or unfinished charge **resolves** with `success: false` (paymentService records a `failed` Payment row either way); throwing is reserved for a misconfigured gateway, which is an operator error rather than a customer outcome. The three wallet gateways cannot complete in one server call — the payer must approve on the provider's page — so their first call returns `raw.requiresApproval` with the redirect URL, and a second call carrying the provider's payment id completes it. Amount conversion is centralised in `toMinorUnits()`, which knows the zero-decimal currencies (JPY, KRW, …) that must not be multiplied by 100.
+- **Notifications** (`notifications/notificationService.js`) — `notify(...)` is the single fan-out point for every business event (booking created, cancelled, etc.): it always writes an in-app `Notification` row, and optionally sends an email when an `emailTemplate` is supplied. SMS/WhatsApp dispatch (`notifySms`, `notifyWhatsapp`) is wired through the same module for a consistent call shape, and resolves to whichever provider the env selects.
 
 All four abstractions share the same shape: a small resolver function keyed off an environment variable, a development-safe default that requires no external account, and a documented extension point for a real provider.
 
@@ -158,7 +169,8 @@ The repository intentionally uses **lowercase** `backend/` and `frontend/` as it
 │   │   ├── layouts/       # admin shell, customer shell
 │   │   ├── pages/         # route-level page components
 │   │   ├── features/      # feature-based modules (bookings, hotels, ...)
-│   │   ├── routes/        # React Router route trees + protected route guards
+│   │   ├── app/           # App Router tree: layouts, page.jsx, auth/permission gates
+│   │   ├── views/         # the page components those routes render
 │   │   ├── services/      # API call modules built on lib/ApiClient
 │   │   ├── hooks/
 │   │   ├── contexts/      # auth context, etc.
@@ -175,9 +187,10 @@ The repository intentionally uses **lowercase** `backend/` and `frontend/` as it
 │   └── .env.example
 │
 ├── .github/
-│   └── workflows/
-│       ├── ci.yml
-│       └── deploy.yml
+│   ├── workflows/
+│   │   └── main.yml
+│   └── scripts/
+│       └── smoke.sh
 │
 ├── documentation/
 │   ├── architecture.md

@@ -1,5 +1,8 @@
+'use client';
+
 import { useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Breadcrumbs } from '../components/ui/index.js';
 import { ADMIN_NAV_ITEMS, getBreadcrumbTrail } from '../constants/navigation.js';
@@ -10,23 +13,23 @@ import './AdminLayout.css';
  * Shell for every /admin/* page: responsive sidebar (collapses to a
  * hamburger-triggered drawer below ~900px), top bar (agency name, current
  * user, logout) and a breadcrumb slot derived from the current route.
- * Nested pages render through <Outlet/>.
+ * Nested pages render as {children}.
  */
-export function AdminLayout() {
+export function AdminLayout({ children }) {
   const { user, hasPermission, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const location = useLocation();
-  const navigate = useNavigate();
+  const pathname = usePathname();
+  const router = useRouter();
 
   const visibleNavItems = ADMIN_NAV_ITEMS.filter((item) => !item.permission || hasPermission(item.permission));
-  const breadcrumbItems = getBreadcrumbTrail(location.pathname);
+  const breadcrumbItems = getBreadcrumbTrail(pathname);
   const userLabel = user ? (user.firstName ? `${user.firstName} ${user.lastName}` : user.email) : '';
 
   async function handleLogout() {
     try {
       await logout();
     } finally {
-      navigate('/login');
+      router.push('/login');
     }
   }
 
@@ -39,17 +42,19 @@ export function AdminLayout() {
         </div>
         <nav className="admin-layout__nav">
           {visibleNavItems.map((item) => (
-            <NavLink
+            <Link
               key={item.to}
-              to={item.to}
-              className={({ isActive }) => `admin-layout__nav-link ${isActive ? 'admin-layout__nav-link--active' : ''}`}
+              href={item.to}
+              className={`admin-layout__nav-link ${
+                pathname === item.to || pathname.startsWith(`${item.to}/`) ? 'admin-layout__nav-link--active' : ''
+              }`}
               onClick={() => setSidebarOpen(false)}
             >
               <span className="admin-layout__nav-icon" aria-hidden="true">
                 {item.icon}
               </span>
               <span>{item.label}</span>
-            </NavLink>
+            </Link>
           ))}
         </nav>
       </aside>
@@ -86,7 +91,7 @@ export function AdminLayout() {
         </div>
 
         <main className="admin-layout__content">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>

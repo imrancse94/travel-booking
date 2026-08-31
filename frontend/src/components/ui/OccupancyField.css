@@ -1,0 +1,145 @@
+.occupancy {
+  position: relative;
+}
+
+/* Matches .form-field__control and .drp__trigger so all three sit level. */
+.occupancy__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 38px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.occupancy__trigger:hover {
+  border-color: #cbd5e1;
+}
+
+.occupancy__trigger:focus-visible,
+.occupancy__trigger--active {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.occupancy__trigger svg {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.occupancy__trigger--active svg,
+.occupancy__trigger:hover svg {
+  color: var(--color-primary);
+}
+
+.occupancy__summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.occupancy__popover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  min-width: 264px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.occupancy__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.occupancy__row-label {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.occupancy__row-hint {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.occupancy__stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.occupancy__step {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.occupancy__step:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.occupancy__step:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.occupancy__step:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.occupancy__count {
+  min-width: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.occupancy__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-3);
+}
+
+.occupancy__done {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.occupancy__done:hover {
+  background: var(--color-primary-hover);
+}

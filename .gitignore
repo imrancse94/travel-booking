@@ -13,6 +13,10 @@ frontend/node_modules/
 
 # Build output
 dist/
+
+# Next.js build output and dev cache
+.next/
+next-env.d.ts
 build/
 coverage/
 *.tsbuildinfo
@@ -50,3 +54,5 @@ junit.xml
 *.tmp
 *.temp
 .cache/
+booking.pem
+booking.pub

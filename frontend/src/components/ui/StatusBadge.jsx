@@ -1,3 +1,5 @@
+'use client';
+
 import './StatusBadge.css';
 
 // Bookings, payments, rooms, invoices, commissions, etc. each have their own

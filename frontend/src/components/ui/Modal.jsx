@@ -1,4 +1,6 @@
-import { useEffect } from 'react';
+'use client';
+
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import './Modal.css';
 
@@ -8,6 +10,11 @@ import './Modal.css';
  * ConfirmDialog for its action buttons).
  */
 export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }) {
+  // document.body is unavailable during Next's server render, so the
+  // portal waits for the client mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     if (!isOpen) return undefined;
     function handleKeyDown(e) {
@@ -22,7 +29,7 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md' })
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   return createPortal(
     <div

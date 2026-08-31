@@ -126,3 +126,11 @@
     width: 100%;
   }
 }
+
+/* Holds the auth slot's width while the session is still being restored, so
+   the header does not jump when the real controls appear. */
+.customer-header__auth-placeholder {
+  display: inline-block;
+  width: 148px;
+  height: 36px;
+}

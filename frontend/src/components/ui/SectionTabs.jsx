@@ -1,4 +1,6 @@
-import { NavLink } from 'react-router-dom';
+'use client';
+
+import Link from 'next/link';
 import './SectionTabs.css';
 
 /**
@@ -9,14 +11,14 @@ export function SectionTabs({ tabs }) {
   return (
     <div className="section-tabs">
       {tabs.map((tab) => (
-        <NavLink
+        <Link
           key={tab.to}
-          to={tab.to}
+          href={tab.to}
           end={tab.end}
           className={({ isActive }) => `section-tabs__tab ${isActive ? 'section-tabs__tab--active' : ''}`}
         >
           {tab.label}
-        </NavLink>
+        </Link>
       ))}
     </div>
   );

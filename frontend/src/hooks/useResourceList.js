@@ -1,6 +1,10 @@
+'use client';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePagination } from './usePagination.js';
 import { useDebounce } from './useDebounce.js';
+import { useToast } from '../components/ui/index.js';
+import { compactParams } from '../utils/queryParams.js';
 
 /**
  * Composes usePagination + useDebounce + fetch/loading/error state for a
@@ -25,6 +29,7 @@ export function useResourceList({ fetcher, initialFilters = {}, initialSort = nu
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const { show } = useToast();
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -47,7 +52,10 @@ export function useResourceList({ fetcher, initialFilters = {}, initialSort = nu
   const reload = useCallback(() => setReloadToken((t) => t + 1), []);
 
   const params = useMemo(() => {
-    const p = { page, limit, ...filters };
+    // compactParams drops unselected filters (empty strings), which the API's
+    // query validators would otherwise reject with a 422 -- surfacing as an
+    // inexplicably empty table.
+    const p = compactParams({ page, limit, ...filters });
     if (debouncedSearch) p.search = debouncedSearch;
     if (sort) {
       p.sortBy = sort.key;
@@ -67,7 +75,11 @@ export function useResourceList({ fetcher, initialFilters = {}, initialSort = nu
         if (res?.meta?.pagination) setMeta(res.meta.pagination);
       })
       .catch((err) => {
-        if (!cancelled) setError(err);
+        if (cancelled) return;
+        setError(err);
+        // Without this a failed fetch is indistinguishable from an empty
+        // result set -- the table just renders its empty state.
+        show(err.message || 'Could not load this list', 'error');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

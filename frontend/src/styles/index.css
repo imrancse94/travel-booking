@@ -6,6 +6,9 @@
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-soft: #eff6ff;
+  /* Deep end of the brand ramp, for large surfaces like the landing hero where
+     the mid blue alone reads flat. */
+  --color-primary-deep: #12275c;
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-danger: #dc2626;
@@ -28,6 +31,10 @@
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+  /* Page-level rhythm: section bands and the landing hero need more air than
+     the component-level steps above. */
+  --space-7: 48px;
+  --space-8: 72px;
 
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
@@ -62,14 +69,309 @@ textarea {
   font-family: inherit;
 }
 
+/*
+ * Customer-side page measure (the admin console has its own shell).
+ *
+ * Wide by design: 1600px rather than 1200px, so large displays are not mostly
+ * empty margin. No gutter at that size -- content runs to the edge of the
+ * measure. The ladder below adds one back as the viewport narrows and flush
+ * content would otherwise touch the screen edge.
+ */
 .container {
-  max-width: 1200px;
+  width: 100%;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 0 var(--space-5);
+  padding: 0;
+}
+
+@media (max-width: 1024px) {
+  .container {
+    padding-inline: var(--space-5);
+  }
 }
 
 @media (max-width: 768px) {
   .container {
-    padding: 0 var(--space-4);
+    padding-inline: var(--space-4);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Shared page primitives: headers, form grids, action rows, detail lists,
+ * empty/error states.
+ *
+ * These live in the GLOBAL stylesheet, not admin-pages.css. They were written
+ * for the admin console but the customer pages use them just as heavily
+ * (Checkout, Profile, MyBookings, BookingConfirmation, HotelDetails ...), and
+ * admin-pages.css is imported by AdminLayout -- so outside /admin those pages
+ * were rendering .form-actions, .page-title, .detail-list and friends with no
+ * styles at all.
+ * ------------------------------------------------------------------------- */
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.page-title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.page-subtitle {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 var(--space-4);
+}
+
+.form-grid--full > * {
+  grid-column: 1 / -1;
+}
+
+.form-section {
+  margin-bottom: var(--space-5);
+}
+
+.form-section__title {
+  margin: 0 0 var(--space-3);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Step wizards read better with the retreat on the left and the advance on the
+   right, rather than both crowded into the right corner. */
+.form-actions--wizard {
+  justify-content: space-between;
+}
+
+.form-actions .btn,
+.form-actions--wizard .btn {
+  min-width: 120px;
+}
+
+@media (max-width: 520px) {
+  .form-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+  }
+}
+
+/* Its own row, separated from the last field of the guest above it. */
+.guest-add {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px dashed var(--color-border);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+.detail-item__label {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.detail-item__value {
+  margin: 2px 0 0;
+  font-size: 0.92rem;
+  color: var(--color-text);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-6);
+  color: var(--color-text-muted);
+  gap: var(--space-2);
+}
+
+.empty-state__icon {
+  font-size: 2rem;
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-6);
+  color: var(--color-danger);
+  gap: var(--space-3);
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.timeline__item {
+  display: flex;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.timeline__item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.timeline__dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.timeline__body {
+  min-width: 0;
+}
+
+.timeline__title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.timeline__meta {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.day-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.day-editor__card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  position: relative;
+}
+
+.day-editor__remove {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  /* Solid danger fill now, so it needs to read as a compact control rather
+     than the full-size form button the base class assumes. */
+  min-width: 0;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+}
+
+.text-muted {
+  color: var(--color-text-muted);
+}
+
+.text-right {
+  text-align: right;
+}
+
+.mt-0 {
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .page-actions {
+    justify-content: flex-start;
   }
 }

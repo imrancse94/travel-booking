@@ -1,3 +1,5 @@
+'use client';
+
 import './Loader.css';
 
 /** Spinner, optionally with a label. Use `inline` to drop the label and size it for inline use (e.g. inside a button/table cell). */

@@ -72,16 +72,24 @@ export const checkInOutSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const availabilityQuerySchema = z.object({
-  destination: z.string().optional(),
-  hotelId: z.string().uuid().optional(),
-  checkIn: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid check-in date'),
-  checkOut: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid check-out date'),
-  adults: z.coerce.number().int().min(1).default(1),
-  children: z.coerce.number().int().min(0).default(0),
-  rooms: z.coerce.number().int().min(1).default(1),
-  roomTypeId: z.string().uuid().optional(),
-  starRating: z.coerce.number().int().min(1).max(5).optional(),
-});
+export const availabilityQuerySchema = z
+  .object({
+    destination: z.string().optional(),
+    hotelId: z.string().uuid().optional(),
+    checkIn: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid check-in date'),
+    checkOut: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid check-out date'),
+    adults: z.coerce.number().int().min(1).default(1),
+    children: z.coerce.number().int().min(0).default(0),
+    rooms: z.coerce.number().int().min(1).default(1),
+    roomTypeId: z.string().uuid().optional(),
+    starRating: z.coerce.number().int().min(1).max(5).optional(),
+  })
+  // Same rule booking creation enforces (see createBooking): without it a
+  // reversed range reported rooms as "available" for an impossible stay, with
+  // null nights/pricing, instead of failing the request.
+  .refine((q) => new Date(q.checkOut) > new Date(q.checkIn), {
+    message: 'Check-out date must be after check-in date',
+    path: ['checkOut'],
+  });
 
 export const idParamSchema = z.object({ id: z.string().uuid() });

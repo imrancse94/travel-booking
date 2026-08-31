@@ -7,6 +7,15 @@ import { emailContent, renderLayout } from '../integrations/email/content/index.
 import { getSettings } from './settingsService.js';
 
 function resolveProvider() {
+  // Tests must never put mail on the wire. Under Docker Compose EMAIL_PROVIDER
+  // is `smtp` pointing at Mailpit, so the integration suite was delivering a
+  // real batch of welcome/verification/booking/cancellation messages into the
+  // shared dev mailbox on every run -- which looked exactly like a booking
+  // having sent a dozen emails. In CI the same setting would aim at whatever
+  // SMTP host was configured.
+  if (env.isTest) {
+    return createConsoleEmailProvider();
+  }
   if (env.emailProvider === 'smtp' && env.smtp.host) {
     return createSmtpEmailProvider();
   }

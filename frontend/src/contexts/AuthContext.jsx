@@ -1,3 +1,5 @@
+'use client';
+
 import { useCallback, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { bootstrapSession, loginThunk, logoutThunk } from '../store/authSlice.js';

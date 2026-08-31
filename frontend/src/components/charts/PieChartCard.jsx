@@ -1,3 +1,5 @@
+'use client';
+
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChartTooltip } from './ChartTooltip.jsx';
 import { CATEGORICAL_COLORS, CHART_SURFACE } from './chartTheme.js';

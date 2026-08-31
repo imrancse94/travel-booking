@@ -1,4 +1,6 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+'use client';
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import './Toast.css';
 
@@ -13,6 +15,11 @@ let idSeq = 0;
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const timers = useRef(new Map());
+
+  // createPortal needs document.body, which does not exist while Next
+  // renders this on the server. Portal only after the client has mounted.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const dismiss = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -41,19 +48,20 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {createPortal(
-        <div className="toast-stack" aria-live="assertive">
-          {toasts.map((t) => (
-            <div key={t.id} className={`toast toast--${t.type}`}>
-              <span className="toast__message">{t.message}</span>
-              <button type="button" className="toast__close" onClick={() => dismiss(t.id)} aria-label="Dismiss">
-                &times;
-              </button>
-            </div>
-          ))}
-        </div>,
-        document.body
-      )}
+      {mounted &&
+        createPortal(
+          <div className="toast-stack" aria-live="assertive">
+            {toasts.map((t) => (
+              <div key={t.id} className={`toast toast--${t.type}`}>
+                <span className="toast__message">{t.message}</span>
+                <button type="button" className="toast__close" onClick={() => dismiss(t.id)} aria-label="Dismiss">
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>,
+          document.body
+        )}
     </ToastContext.Provider>
   );
 }

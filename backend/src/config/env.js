@@ -47,7 +47,48 @@ export const env = {
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
   },
 
+  // Which gateway paymentService charges when a request does not name one.
+  // Every provider below defaults to its SANDBOX host, so a misconfigured
+  // deployment fails against a test endpoint rather than a live one.
   paymentGateway: process.env.PAYMENT_GATEWAY || 'mock',
+
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY || '',
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+    apiVersion: process.env.STRIPE_API_VERSION || '2024-06-20',
+    // Sandbox only: lets the card flow be exercised end to end before Stripe
+    // Elements is wired into the checkout form. Ignored once the browser sends
+    // metadata.paymentMethodId.
+    testPaymentMethod: process.env.STRIPE_TEST_PAYMENT_METHOD || 'pm_card_visa',
+  },
+
+  paypal: {
+    clientId: process.env.PAYPAL_CLIENT_ID || '',
+    clientSecret: process.env.PAYPAL_CLIENT_SECRET || '',
+    baseUrl: process.env.PAYPAL_BASE_URL || 'https://api-m.sandbox.paypal.com',
+    returnUrl: process.env.PAYPAL_RETURN_URL || '',
+    cancelUrl: process.env.PAYPAL_CANCEL_URL || '',
+  },
+
+  bkash: {
+    appKey: process.env.BKASH_APP_KEY || '',
+    appSecret: process.env.BKASH_APP_SECRET || '',
+    username: process.env.BKASH_USERNAME || '',
+    password: process.env.BKASH_PASSWORD || '',
+    baseUrl: process.env.BKASH_BASE_URL || 'https://tokenized.sandbox.bka.sh/v1.2.0-beta',
+    callbackUrl: process.env.BKASH_CALLBACK_URL || '',
+  },
+
+  nagad: {
+    merchantId: process.env.NAGAD_MERCHANT_ID || '',
+    merchantNumber: process.env.NAGAD_MERCHANT_NUMBER || '',
+    merchantPrivateKey: process.env.NAGAD_MERCHANT_PRIVATE_KEY || '',
+    nagadPublicKey: process.env.NAGAD_PUBLIC_KEY || '',
+    baseUrl: process.env.NAGAD_BASE_URL || 'https://api.mynagad.com/remote-payment-gateway-1.0',
+    apiVersion: process.env.NAGAD_API_VERSION || 'v-0.2.0',
+    callbackUrl: process.env.NAGAD_CALLBACK_URL || '',
+  },
   smsProvider: process.env.SMS_PROVIDER || 'none',
   whatsappProvider: process.env.WHATSAPP_PROVIDER || 'none',
 };

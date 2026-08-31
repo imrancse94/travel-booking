@@ -1,3 +1,5 @@
+'use client';
+
 import './Skeleton.css';
 
 /** A single pulsing placeholder block. */
