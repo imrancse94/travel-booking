@@ -1,4 +1,6 @@
-import { prisma } from '../config/prisma.js';
+import { and, asc, eq, gt, gte, ilike, inArray, isNull, lt, ne, or } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { bookingRooms, bookings, hotelAmenities, hotels, rooms } from '../db/schema.js';
 import { calculateRoomStayPrice } from './pricingService.js';
 
 // Booking statuses that actually occupy a room. `pending` bookings have not
@@ -10,40 +12,63 @@ export const BLOCKING_BOOKING_STATUSES = ['held', 'confirmed', 'checked_in'];
  * overlapping booking in a blocking status for [checkIn, checkOut).
  *
  * Overlap rule: existing.check_in < requested.check_out AND existing.check_out > requested.check_in
+ *
+ * `client` is the transaction when this runs inside the booking lock, so the
+ * read sees the same snapshot the insert will be made against. The booking's
+ * status was a nested Prisma filter and is now a join.
  */
 export async function findOverlappingRoomIds(client, { roomIds, checkIn, checkOut, excludeBookingId }) {
   if (roomIds.length === 0) return new Set();
-  const db = client || prisma;
-  const checkInDate = new Date(checkIn);
-  const checkOutDate = new Date(checkOut);
+  const conn = client || db;
 
-  const overlapping = await db.bookingRoom.findMany({
-    where: {
-      roomId: { in: roomIds },
-      checkIn: { lt: checkOutDate },
-      checkOut: { gt: checkInDate },
-      ...(excludeBookingId ? { bookingId: { not: excludeBookingId } } : {}),
-      booking: { status: { in: BLOCKING_BOOKING_STATUSES } },
-    },
-    select: { roomId: true },
-  });
+  const filters = [
+    inArray(bookingRooms.roomId, roomIds),
+    lt(bookingRooms.checkIn, new Date(checkOut)),
+    gt(bookingRooms.checkOut, new Date(checkIn)),
+    excludeBookingId ? ne(bookingRooms.bookingId, excludeBookingId) : null,
+    inArray(bookings.status, BLOCKING_BOOKING_STATUSES),
+  ].filter(Boolean);
+
+  const overlapping = await conn
+    .select({ roomId: bookingRooms.roomId })
+    .from(bookingRooms)
+    .innerJoin(bookings, eq(bookingRooms.bookingId, bookings.id))
+    .where(and(...filters));
 
   return new Set(overlapping.map((r) => r.roomId));
 }
 
 export async function getAvailableRoomsForType({ client, roomTypeId, checkIn, checkOut, limit }) {
-  const db = client || prisma;
+  const conn = client || db;
 
-  const rooms = await db.room.findMany({
-    where: { roomTypeId, status: { in: ['available', 'occupied'] }, deletedAt: null },
-    orderBy: { roomNumber: 'asc' },
-  });
+  const roomRows = await conn
+    .select()
+    .from(rooms)
+    .where(
+      and(
+        eq(rooms.roomTypeId, roomTypeId),
+        inArray(rooms.status, ['available', 'occupied']),
+        isNull(rooms.deletedAt)
+      )
+    )
+    .orderBy(asc(rooms.roomNumber));
 
-  const roomIds = rooms.map((r) => r.id);
-  const overlapping = await findOverlappingRoomIds(db, { roomIds, checkIn, checkOut });
-  const available = rooms.filter((r) => !overlapping.has(r.id) && r.status !== 'maintenance' && r.status !== 'inactive');
+  const roomIds = roomRows.map((r) => r.id);
+  const overlapping = await findOverlappingRoomIds(conn, { roomIds, checkIn, checkOut });
+  const available = roomRows.filter(
+    (r) => !overlapping.has(r.id) && r.status !== 'maintenance' && r.status !== 'inactive'
+  );
 
   return typeof limit === 'number' ? available.slice(0, limit) : available;
+}
+
+/** Hotel ids carrying at least one of the requested amenities. */
+async function hotelIdsWithAnyAmenity(amenityIds) {
+  const rows = await db
+    .selectDistinct({ hotelId: hotelAmenities.hotelId })
+    .from(hotelAmenities)
+    .where(inArray(hotelAmenities.amenityId, amenityIds));
+  return rows.map((r) => r.hotelId);
 }
 
 /**
@@ -63,42 +88,49 @@ export async function searchAvailability({
   starRating,
   amenityIds,
 }) {
-  const hotelWhere = {
-    status: 'active',
-    deletedAt: null,
-    ...(hotelId ? { id: hotelId } : {}),
-    ...(starRating ? { starRating: { gte: Number(starRating) } } : {}),
-    ...(destination
-      ? {
-          OR: [
-            { city: { contains: destination, mode: 'insensitive' } },
-            { country: { contains: destination, mode: 'insensitive' } },
-            { name: { contains: destination, mode: 'insensitive' } },
-          ],
-        }
-      : {}),
-    ...(amenityIds?.length ? { hotelAmenities: { some: { amenityId: { in: amenityIds } } } } : {}),
-  };
+  // Prisma expressed this as `hotelAmenities: { some: ... }`; Drizzle cannot
+  // filter a parent by its relation, so the ids are resolved first.
+  const amenityHotelIds = amenityIds?.length ? await hotelIdsWithAnyAmenity(amenityIds) : null;
+  if (amenityHotelIds && amenityHotelIds.length === 0) return [];
 
-  const hotels = await prisma.hotel.findMany({
-    where: hotelWhere,
-    include: {
-      images: { orderBy: { sortOrder: 'asc' } },
-      hotelAmenities: { include: { amenity: true } },
+  const filters = [
+    eq(hotels.status, 'active'),
+    isNull(hotels.deletedAt),
+    hotelId ? eq(hotels.id, hotelId) : null,
+    starRating ? gte(hotels.starRating, Number(starRating)) : null,
+    amenityHotelIds ? inArray(hotels.id, amenityHotelIds) : null,
+    destination
+      ? or(
+          ilike(hotels.city, `%${destination}%`),
+          ilike(hotels.country, `%${destination}%`),
+          ilike(hotels.name, `%${destination}%`)
+        )
+      : null,
+  ].filter(Boolean);
+
+  const hotelRows = await db.query.hotels.findMany({
+    where: and(...filters),
+    with: {
+      images: { orderBy: (i, { asc: a }) => [a(i.sortOrder)] },
+      hotelAmenities: { with: { amenity: true } },
       roomTypes: {
-        where: {
-          deletedAt: null,
-          maxAdults: { gte: Math.min(adults, roomsRequested > 0 ? adults : adults) },
-          ...(roomTypeId ? { id: roomTypeId } : {}),
+        where: (rt, { and: a, eq: e, gte: g, isNull: nul }) =>
+          a(
+            nul(rt.deletedAt),
+            g(rt.maxAdults, adults),
+            ...(roomTypeId ? [e(rt.id, roomTypeId)] : [])
+          ),
+        with: {
+          amenities: { with: { amenity: true } },
+          images: { orderBy: (i, { asc: a2 }) => [a2(i.sortOrder)] },
         },
-        include: { amenities: { include: { amenity: true } }, images: { orderBy: { sortOrder: 'asc' } } },
       },
     },
   });
 
   const results = [];
 
-  for (const hotel of hotels) {
+  for (const hotel of hotelRows) {
     const roomTypeResults = [];
 
     for (const rt of hotel.roomTypes) {
@@ -110,7 +142,7 @@ export async function searchAvailability({
       // filter/sort by price treat it as unpriced rather than excluding it).
       let pricing = null;
       try {
-        pricing = await calculateRoomStayPrice({ tx: prisma, roomTypeId: rt.id, checkIn, checkOut, adults, children });
+        pricing = await calculateRoomStayPrice({ tx: db, roomTypeId: rt.id, checkIn, checkOut, adults, children });
       } catch {
         pricing = null;
       }

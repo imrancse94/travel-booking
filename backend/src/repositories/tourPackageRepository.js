@@ -1,100 +1,138 @@
-import { prisma } from '../config/prisma.js';
+import { and, asc, count, desc, eq, ilike, isNull, or } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { tourImages, tourItineraries, tourPackages } from '../db/schema.js';
 
-const detailInclude = {
-  destination: { select: { id: true, name: true, country: true } },
-  images: { orderBy: { sortOrder: 'asc' } },
-  itineraries: { orderBy: { dayNumber: 'asc' } },
+const detailRelations = {
+  destination: { columns: { id: true, name: true, country: true } },
+  images: { orderBy: (i, { asc: a }) => [a(i.sortOrder)] },
+  itineraries: { orderBy: (i, { asc: a }) => [a(i.dayNumber)] },
 };
 
+const notDeleted = isNull(tourPackages.deletedAt);
+
 export async function findById(id) {
-  return prisma.tourPackage.findFirst({ where: { id, deletedAt: null }, include: detailInclude });
+  const row = await db.query.tourPackages.findFirst({
+    where: and(eq(tourPackages.id, id), notDeleted),
+    with: detailRelations,
+  });
+  return row ?? null;
 }
 
 export async function findRawById(id) {
-  return prisma.tourPackage.findFirst({ where: { id, deletedAt: null } });
+  const [row] = await db
+    .select()
+    .from(tourPackages)
+    .where(and(eq(tourPackages.id, id), notDeleted))
+    .limit(1);
+  return row ?? null;
 }
 
-export async function list({ page, limit, skip, search, destinationId, status }) {
-  const where = {
-    deletedAt: null,
-    ...(destinationId ? { destinationId } : {}),
-    ...(status ? { status } : {}),
-    ...(search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { description: { contains: search, mode: 'insensitive' } },
-          ],
-        }
-      : {}),
-  };
+export async function list({ limit, skip, search, destinationId, status }) {
+  const filters = [
+    notDeleted,
+    destinationId ? eq(tourPackages.destinationId, destinationId) : null,
+    status ? eq(tourPackages.status, status) : null,
+    search
+      ? or(ilike(tourPackages.name, `%${search}%`), ilike(tourPackages.description, `%${search}%`))
+      : null,
+  ].filter(Boolean);
+  const where = and(...filters);
 
-  const [items, total] = await Promise.all([
-    prisma.tourPackage.findMany({
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.tourPackages.findMany({
       where,
-      include: { destination: { select: { id: true, name: true, country: true } }, images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
+      with: {
+        destination: { columns: { id: true, name: true, country: true } },
+        images: { orderBy: (i, { asc: a }) => [a(i.sortOrder)], limit: 1 },
+      },
+      orderBy: desc(tourPackages.createdAt),
+      limit,
+      offset: skip,
     }),
-    prisma.tourPackage.count({ where }),
+    db.select({ value: count() }).from(tourPackages).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function create(data) {
-  return prisma.tourPackage.create({ data, include: detailInclude });
+  const [created] = await db.insert(tourPackages).values(data).returning();
+  return findById(created.id);
 }
 
 export async function update(id, data) {
-  return prisma.tourPackage.update({ where: { id }, data, include: detailInclude });
+  const [updated] = await db.update(tourPackages).set(data).where(eq(tourPackages.id, id)).returning();
+  return updated ? findById(updated.id) : null;
 }
 
 export async function softDelete(id) {
-  return prisma.tourPackage.update({ where: { id }, data: { deletedAt: new Date(), status: 'inactive' } });
+  const [row] = await db
+    .update(tourPackages)
+    .set({ deletedAt: new Date(), status: 'inactive' })
+    .where(eq(tourPackages.id, id))
+    .returning();
+  return row ?? null;
 }
 
 // ---- Itinerary ----
+// Prisma addressed this composite key as tourPackageId_dayNumber.
+const dayKey = (tourPackageId, dayNumber) =>
+  and(eq(tourItineraries.tourPackageId, tourPackageId), eq(tourItineraries.dayNumber, dayNumber));
 
 export async function findItineraryDay(tourPackageId, dayNumber) {
-  return prisma.tourItinerary.findUnique({ where: { tourPackageId_dayNumber: { tourPackageId, dayNumber } } });
+  const [row] = await db.select().from(tourItineraries).where(dayKey(tourPackageId, dayNumber)).limit(1);
+  return row ?? null;
 }
 
 export async function listItinerary(tourPackageId) {
-  return prisma.tourItinerary.findMany({ where: { tourPackageId }, orderBy: { dayNumber: 'asc' } });
+  return db
+    .select()
+    .from(tourItineraries)
+    .where(eq(tourItineraries.tourPackageId, tourPackageId))
+    .orderBy(asc(tourItineraries.dayNumber));
 }
 
 export async function createItineraryDay(tourPackageId, data) {
-  return prisma.tourItinerary.create({ data: { ...data, tourPackageId } });
+  const [row] = await db.insert(tourItineraries).values({ ...data, tourPackageId }).returning();
+  return row;
 }
 
 export async function updateItineraryDay(tourPackageId, dayNumber, data) {
-  return prisma.tourItinerary.update({ where: { tourPackageId_dayNumber: { tourPackageId, dayNumber } }, data });
+  const [row] = await db.update(tourItineraries).set(data).where(dayKey(tourPackageId, dayNumber)).returning();
+  return row ?? null;
 }
 
 export async function deleteItineraryDay(tourPackageId, dayNumber) {
-  return prisma.tourItinerary.delete({ where: { tourPackageId_dayNumber: { tourPackageId, dayNumber } } });
+  const [row] = await db.delete(tourItineraries).where(dayKey(tourPackageId, dayNumber)).returning();
+  return row ?? null;
 }
 
 // ---- Images ----
 
 export async function listImages(tourPackageId) {
-  return prisma.tourImage.findMany({ where: { tourPackageId }, orderBy: { sortOrder: 'asc' } });
+  return db
+    .select()
+    .from(tourImages)
+    .where(eq(tourImages.tourPackageId, tourPackageId))
+    .orderBy(asc(tourImages.sortOrder));
 }
 
 export async function findImageById(imageId) {
-  return prisma.tourImage.findUnique({ where: { id: imageId } });
+  const [row] = await db.select().from(tourImages).where(eq(tourImages.id, imageId)).limit(1);
+  return row ?? null;
 }
 
 export async function createImage(tourPackageId, data) {
-  return prisma.tourImage.create({ data: { ...data, tourPackageId } });
+  const [row] = await db.insert(tourImages).values({ ...data, tourPackageId }).returning();
+  return row;
 }
 
 export async function updateImage(imageId, data) {
-  return prisma.tourImage.update({ where: { id: imageId }, data });
+  const [row] = await db.update(tourImages).set(data).where(eq(tourImages.id, imageId)).returning();
+  return row ?? null;
 }
 
 export async function deleteImage(imageId) {
-  return prisma.tourImage.delete({ where: { id: imageId } });
+  const [row] = await db.delete(tourImages).where(eq(tourImages.id, imageId)).returning();
+  return row ?? null;
 }

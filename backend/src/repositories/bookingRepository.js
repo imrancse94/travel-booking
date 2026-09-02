@@ -1,64 +1,88 @@
-import { prisma } from '../config/prisma.js';
+import { and, count, desc, eq, gte, ilike, inArray, lte, or } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { bookings, customers } from '../db/schema.js';
 
-const fullInclude = {
-  hotel: { select: { id: true, name: true, city: true, country: true } },
-  customer: { select: { id: true, userId: true, firstName: true, lastName: true, email: true, phone: true } },
-  agent: { select: { id: true, firstName: true, lastName: true, email: true } },
-  bookingRooms: { include: { room: true, roomType: true } },
+const fullRelations = {
+  hotel: { columns: { id: true, name: true, city: true, country: true } },
+  customer: { columns: { id: true, userId: true, firstName: true, lastName: true, email: true, phone: true } },
+  agent: { columns: { id: true, firstName: true, lastName: true, email: true } },
+  bookingRooms: { with: { room: true, roomType: true } },
   guests: true,
-  services: { include: { service: true } },
+  services: { with: { service: true } },
   payments: true,
   invoices: true,
-  statusHistory: { orderBy: { createdAt: 'desc' } },
+  statusHistory: true,
 };
 
+/** Prisma ordered the nested status history; Drizzle takes it as a callback. */
+function withOrderedHistory() {
+  return {
+    ...fullRelations,
+    statusHistory: { orderBy: (h, { desc: d }) => [d(h.createdAt)] },
+  };
+}
+
 export async function findBookingById(id) {
-  return prisma.booking.findUnique({ where: { id }, include: fullInclude });
+  const row = await db.query.bookings.findFirst({ where: eq(bookings.id, id), with: withOrderedHistory() });
+  return row ?? null;
 }
 
 export async function findBookingByNumber(bookingNumber) {
-  return prisma.booking.findUnique({ where: { bookingNumber }, include: fullInclude });
+  const row = await db.query.bookings.findFirst({
+    where: eq(bookings.bookingNumber, bookingNumber),
+    with: withOrderedHistory(),
+  });
+  return row ?? null;
+}
+
+/** The search also matches the customer's name or email, which lives on the relation. */
+async function customerIdsMatching(search) {
+  const rows = await db
+    .select({ id: customers.id })
+    .from(customers)
+    .where(
+      or(
+        ilike(customers.firstName, `%${search}%`),
+        ilike(customers.lastName, `%${search}%`),
+        ilike(customers.email, `%${search}%`)
+      )
+    );
+  return rows.map((r) => r.id);
 }
 
 export async function listBookings({ page, limit, skip, search, status, hotelId, customerId, agentId, dateFrom, dateTo }) {
-  const where = {
-    ...(status ? { status } : {}),
-    ...(hotelId ? { hotelId } : {}),
-    ...(customerId ? { customerId } : {}),
-    ...(agentId ? { agentId } : {}),
-    ...(dateFrom || dateTo
-      ? {
-          checkIn: {
-            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-            ...(dateTo ? { lte: new Date(dateTo) } : {}),
-          },
-        }
-      : {}),
-    ...(search
-      ? {
-          OR: [
-            { bookingNumber: { contains: search, mode: 'insensitive' } },
-            { customer: { firstName: { contains: search, mode: 'insensitive' } } },
-            { customer: { lastName: { contains: search, mode: 'insensitive' } } },
-            { customer: { email: { contains: search, mode: 'insensitive' } } },
-          ],
-        }
-      : {}),
-  };
+  const matchedCustomerIds = search ? await customerIdsMatching(search) : null;
 
-  const [items, total] = await Promise.all([
-    prisma.booking.findMany({
+  const filters = [
+    status ? eq(bookings.status, status) : null,
+    hotelId ? eq(bookings.hotelId, hotelId) : null,
+    customerId ? eq(bookings.customerId, customerId) : null,
+    agentId ? eq(bookings.agentId, agentId) : null,
+    dateFrom ? gte(bookings.checkIn, new Date(dateFrom)) : null,
+    dateTo ? lte(bookings.checkIn, new Date(dateTo)) : null,
+    search
+      ? or(
+          ilike(bookings.bookingNumber, `%${search}%`),
+          ...(matchedCustomerIds?.length ? [inArray(bookings.customerId, matchedCustomerIds)] : [])
+        )
+      : null,
+  ].filter(Boolean);
+  const where = filters.length ? and(...filters) : undefined;
+
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.bookings.findMany({
       where,
-      include: {
-        hotel: { select: { id: true, name: true } },
-        customer: { select: { id: true, firstName: true, lastName: true, email: true } },
-        bookingRooms: { select: { id: true, roomType: { select: { name: true } } } },
+      // The list view only needs enough for a table row.
+      with: {
+        hotel: { columns: { id: true, name: true } },
+        customer: { columns: { id: true, firstName: true, lastName: true, email: true } },
+        bookingRooms: { columns: { id: true }, with: { roomType: { columns: { name: true } } } },
       },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
+      orderBy: desc(bookings.createdAt),
+      limit,
+      offset: skip,
     }),
-    prisma.booking.count({ where }),
+    db.select({ value: count() }).from(bookings).where(where),
   ]);
 
   return { items, total, page, limit };

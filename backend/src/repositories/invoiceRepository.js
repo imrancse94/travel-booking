@@ -1,62 +1,85 @@
-import { prisma } from '../config/prisma.js';
+import { and, count, desc, eq, gte, ilike, inArray, lte, or } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { bookings, invoices } from '../db/schema.js';
 
-const fullInclude = {
+// The full tree the invoice PDF and detail view need.
+const fullRelations = {
   items: true,
   booking: {
-    include: {
+    with: {
       hotel: true,
       customer: true,
-      bookingRooms: { include: { roomType: true } },
-      services: { include: { service: true } },
+      bookingRooms: { with: { roomType: true } },
+      services: { with: { service: true } },
     },
   },
 };
 
 export async function findById(id) {
-  return prisma.invoice.findUnique({ where: { id }, include: fullInclude });
+  const row = await db.query.invoices.findFirst({ where: eq(invoices.id, id), with: fullRelations });
+  return row ?? null;
 }
 
 export async function findByBookingId(bookingId) {
-  return prisma.invoice.findFirst({ where: { bookingId }, include: fullInclude, orderBy: { createdAt: 'desc' } });
+  const row = await db.query.invoices.findFirst({
+    where: eq(invoices.bookingId, bookingId),
+    with: fullRelations,
+    orderBy: desc(invoices.createdAt),
+  });
+  return row ?? null;
 }
 
-export async function list({ page, limit, skip, search, status, bookingId, customerId, dateFrom, dateTo }) {
-  const where = {
-    ...(status ? { status } : {}),
-    ...(bookingId ? { bookingId } : {}),
-    ...(customerId ? { booking: { customerId } } : {}),
-    ...(dateFrom || dateTo
-      ? {
-          issuedAt: {
-            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-            ...(dateTo ? { lte: new Date(dateTo) } : {}),
-          },
-        }
-      : {}),
-    ...(search
-      ? {
-          OR: [
-            { invoiceNumber: { contains: search, mode: 'insensitive' } },
-            { booking: { bookingNumber: { contains: search, mode: 'insensitive' } } },
-          ],
-        }
-      : {}),
-  };
+async function bookingIdsFor({ customerId, search }) {
+  const filters = [
+    customerId ? eq(bookings.customerId, customerId) : null,
+    search ? ilike(bookings.bookingNumber, `%${search}%`) : null,
+  ].filter(Boolean);
+  if (!filters.length) return null;
+  const rows = await db.select({ id: bookings.id }).from(bookings).where(and(...filters));
+  return rows.map((r) => r.id);
+}
 
-  const [items, total] = await Promise.all([
-    prisma.invoice.findMany({
+export async function list({ limit, skip, search, status, bookingId, customerId, dateFrom, dateTo }) {
+  const customerBookingIds = customerId ? await bookingIdsFor({ customerId }) : null;
+  if (customerBookingIds && customerBookingIds.length === 0) return { items: [], total: 0 };
+  const searchBookingIds = search ? await bookingIdsFor({ search }) : null;
+
+  const filters = [
+    status ? eq(invoices.status, status) : null,
+    bookingId ? eq(invoices.bookingId, bookingId) : null,
+    customerBookingIds ? inArray(invoices.bookingId, customerBookingIds) : null,
+    dateFrom ? gte(invoices.issuedAt, new Date(dateFrom)) : null,
+    dateTo ? lte(invoices.issuedAt, new Date(dateTo)) : null,
+    search
+      ? or(
+          ilike(invoices.invoiceNumber, `%${search}%`),
+          ...(searchBookingIds?.length ? [inArray(invoices.bookingId, searchBookingIds)] : [])
+        )
+      : null,
+  ].filter(Boolean);
+  const where = filters.length ? and(...filters) : undefined;
+
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.invoices.findMany({
       where,
-      include: { booking: { select: { id: true, bookingNumber: true, customer: { select: { firstName: true, lastName: true } } } } },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
+      // The list only needs enough to render a row.
+      with: {
+        booking: {
+          columns: { id: true, bookingNumber: true },
+          with: { customer: { columns: { firstName: true, lastName: true } } },
+        },
+      },
+      orderBy: desc(invoices.createdAt),
+      limit,
+      offset: skip,
     }),
-    prisma.invoice.count({ where }),
+    db.select({ value: count() }).from(invoices).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function updatePdfUrl(id, pdfUrl) {
-  return prisma.invoice.update({ where: { id }, data: { pdfUrl } });
+  const [row] = await db.update(invoices).set({ pdfUrl }).where(eq(invoices.id, id)).returning();
+  return row ?? null;
 }

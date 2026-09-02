@@ -1,28 +1,34 @@
-// Generates human-friendly, unique booking numbers like BK-2026-000001.
-//
-// Must be called from inside the same Prisma transaction that creates the
-// booking row. We take a Postgres advisory transaction lock keyed by
-// "<prefix>:<year>" so concurrent transactions serialize around the counter
-// instead of racing on the same next number; the lock is released
-// automatically when the transaction commits or rolls back.
+import { and, count, gte, lt, sql } from 'drizzle-orm';
+import { bookings, invoices, tourBookings } from '../db/schema.js';
 
-function adviserKey(namespace) {
-  // hashtextextended returns a bigint hash of the string -> stable per-namespace lock id.
-  return namespace;
-}
+// Generates human-friendly, unique numbers like BK-2026-000001.
+//
+// Must be called from inside the same transaction that creates the row. It
+// takes a Postgres advisory transaction lock keyed by "<namespace>:<year>" so
+// concurrent transactions serialize around the counter instead of racing on the
+// same next number; the lock releases when the transaction commits or rolls back.
+
+// Prisma allowed `tx[namespace]` to reach a model by name; Drizzle tables are
+// values, so the namespaces map to them explicitly.
+const TABLES = { booking: bookings, tourBooking: tourBookings, invoice: invoices };
 
 export async function generateSequentialNumber(tx, { prefix, namespace, year = new Date().getFullYear(), digits = 6 }) {
-  const lockNamespace = adviserKey(`${namespace}:${year}`);
-  await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', lockNamespace);
+  const table = TABLES[namespace];
+  if (!table) throw new Error(`No table registered for sequential namespace "${namespace}"`);
+
+  const lockNamespace = `${namespace}:${year}`;
+  // Parameterised, so the namespace cannot be interpolated into the statement.
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockNamespace}, 0))`);
 
   const yearStart = new Date(Date.UTC(year, 0, 1));
   const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
 
-  const count = await tx[namespace].count({
-    where: { createdAt: { gte: yearStart, lt: yearEnd } },
-  });
+  const [{ value }] = await tx
+    .select({ value: count() })
+    .from(table)
+    .where(and(gte(table.createdAt, yearStart), lt(table.createdAt, yearEnd)));
 
-  const sequence = String(count + 1).padStart(digits, '0');
+  const sequence = String(Number(value) + 1).padStart(digits, '0');
   return `${prefix}-${year}-${sequence}`;
 }
 

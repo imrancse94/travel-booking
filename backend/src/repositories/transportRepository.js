@@ -1,39 +1,55 @@
-import { prisma } from '../config/prisma.js';
+import { and, count, desc, eq, gte, ilike, isNull, lte, or } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { drivers, transportBookings, vehicles } from '../db/schema.js';
 
 // ==================================================
 // Vehicles
 // ==================================================
 
+const vehicleNotDeleted = isNull(vehicles.deletedAt);
+
 export async function findVehicleById(id) {
-  return prisma.vehicle.findFirst({ where: { id, deletedAt: null }, include: { drivers: { select: { id: true, name: true } } } });
+  const row = await db.query.vehicles.findFirst({
+    where: and(eq(vehicles.id, id), vehicleNotDeleted),
+    with: { drivers: { columns: { id: true, name: true } } },
+  });
+  return row ?? null;
 }
 
-export async function listVehicles({ page, limit, skip, search, type, status }) {
-  const where = {
-    deletedAt: null,
-    ...(type ? { type } : {}),
-    ...(status ? { status } : {}),
-    ...(search ? { registrationNumber: { contains: search, mode: 'insensitive' } } : {}),
-  };
+export async function listVehicles({ limit, skip, search, type, status }) {
+  const filters = [
+    vehicleNotDeleted,
+    type ? eq(vehicles.type, type) : null,
+    status ? eq(vehicles.status, status) : null,
+    search ? ilike(vehicles.registrationNumber, `%${search}%`) : null,
+  ].filter(Boolean);
+  const where = and(...filters);
 
-  const [items, total] = await Promise.all([
-    prisma.vehicle.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-    prisma.vehicle.count({ where }),
+  const [items, [{ value: total }]] = await Promise.all([
+    db.select().from(vehicles).where(where).orderBy(desc(vehicles.createdAt)).limit(limit).offset(skip),
+    db.select({ value: count() }).from(vehicles).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function createVehicle(data) {
-  return prisma.vehicle.create({ data });
+  const [row] = await db.insert(vehicles).values(data).returning();
+  return row;
 }
 
 export async function updateVehicle(id, data) {
-  return prisma.vehicle.update({ where: { id }, data });
+  const [row] = await db.update(vehicles).set(data).where(eq(vehicles.id, id)).returning();
+  return row ?? null;
 }
 
 export async function softDeleteVehicle(id) {
-  return prisma.vehicle.update({ where: { id }, data: { deletedAt: new Date(), status: 'inactive' } });
+  const [row] = await db
+    .update(vehicles)
+    .set({ deletedAt: new Date(), status: 'inactive' })
+    .where(eq(vehicles.id, id))
+    .returning();
+  return row ?? null;
 }
 
 // ==================================================
@@ -41,101 +57,113 @@ export async function softDeleteVehicle(id) {
 // ==================================================
 
 export async function findDriverById(id) {
-  return prisma.driver.findUnique({ where: { id }, include: { vehicle: { select: { id: true, registrationNumber: true, type: true } } } });
+  const row = await db.query.drivers.findFirst({
+    where: eq(drivers.id, id),
+    with: { vehicle: { columns: { id: true, registrationNumber: true, type: true } } },
+  });
+  return row ?? null;
 }
 
-export async function listDrivers({ page, limit, skip, search, status, vehicleId }) {
-  const where = {
-    ...(status ? { status } : {}),
-    ...(vehicleId ? { vehicleId } : {}),
-    ...(search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { phone: { contains: search, mode: 'insensitive' } },
-            { licenseNumber: { contains: search, mode: 'insensitive' } },
-          ],
-        }
-      : {}),
-  };
+export async function listDrivers({ limit, skip, search, status, vehicleId }) {
+  const filters = [
+    status ? eq(drivers.status, status) : null,
+    vehicleId ? eq(drivers.vehicleId, vehicleId) : null,
+    search
+      ? or(
+          ilike(drivers.name, `%${search}%`),
+          ilike(drivers.phone, `%${search}%`),
+          ilike(drivers.licenseNumber, `%${search}%`)
+        )
+      : null,
+  ].filter(Boolean);
+  const where = filters.length ? and(...filters) : undefined;
 
-  const [items, total] = await Promise.all([
-    prisma.driver.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-    prisma.driver.count({ where }),
+  const [items, [{ value: total }]] = await Promise.all([
+    db.select().from(drivers).where(where).orderBy(desc(drivers.createdAt)).limit(limit).offset(skip),
+    db.select({ value: count() }).from(drivers).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function createDriver(data) {
-  return prisma.driver.create({ data });
+  const [row] = await db.insert(drivers).values(data).returning();
+  return row;
 }
 
 export async function updateDriver(id, data) {
-  return prisma.driver.update({ where: { id }, data });
+  const [row] = await db.update(drivers).set(data).where(eq(drivers.id, id)).returning();
+  return row ?? null;
 }
 
-// Driver has no deletedAt column in the schema, so "delete" disables the
-// driver by flipping status to inactive rather than removing the row (which
-// would also fail if the driver is still referenced by transport bookings).
+// Driver has no deletedAt column, so "delete" disables the driver by flipping
+// status to inactive rather than removing a row transport bookings may reference.
 export async function disableDriver(id) {
-  return prisma.driver.update({ where: { id }, data: { status: 'inactive' } });
+  const [row] = await db.update(drivers).set({ status: 'inactive' }).where(eq(drivers.id, id)).returning();
+  return row ?? null;
 }
 
 // ==================================================
 // Transport bookings
 // ==================================================
 
-const bookingInclude = {
-  vehicle: { select: { id: true, type: true, registrationNumber: true, capacity: true } },
-  driver: { select: { id: true, name: true, phone: true } },
+const bookingRelations = {
+  vehicle: { columns: { id: true, type: true, registrationNumber: true, capacity: true } },
+  driver: { columns: { id: true, name: true, phone: true } },
 };
 
 export async function findBookingById(id) {
-  return prisma.transportBooking.findUnique({ where: { id }, include: bookingInclude });
+  const row = await db.query.transportBookings.findFirst({
+    where: eq(transportBookings.id, id),
+    with: bookingRelations,
+  });
+  return row ?? null;
 }
 
-export async function listBookings({ page, limit, skip, search, status, vehicleId, driverId, dateFrom, dateTo }) {
-  const where = {
-    ...(status ? { status } : {}),
-    ...(vehicleId ? { vehicleId } : {}),
-    ...(driverId ? { driverId } : {}),
-    ...(dateFrom || dateTo
-      ? {
-          date: {
-            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-            ...(dateTo ? { lte: new Date(dateTo) } : {}),
-          },
-        }
-      : {}),
-    ...(search
-      ? {
-          OR: [
-            { pickup: { contains: search, mode: 'insensitive' } },
-            { dropoff: { contains: search, mode: 'insensitive' } },
-          ],
-        }
-      : {}),
-  };
+export async function listBookings({ limit, skip, search, status, vehicleId, driverId, dateFrom, dateTo }) {
+  const filters = [
+    status ? eq(transportBookings.status, status) : null,
+    vehicleId ? eq(transportBookings.vehicleId, vehicleId) : null,
+    driverId ? eq(transportBookings.driverId, driverId) : null,
+    dateFrom ? gte(transportBookings.date, new Date(dateFrom)) : null,
+    dateTo ? lte(transportBookings.date, new Date(dateTo)) : null,
+    search
+      ? or(ilike(transportBookings.pickup, `%${search}%`), ilike(transportBookings.dropoff, `%${search}%`))
+      : null,
+  ].filter(Boolean);
+  const where = filters.length ? and(...filters) : undefined;
 
-  const [items, total] = await Promise.all([
-    prisma.transportBooking.findMany({ where, include: bookingInclude, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-    prisma.transportBooking.count({ where }),
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.transportBookings.findMany({
+      where,
+      with: bookingRelations,
+      orderBy: desc(transportBookings.createdAt),
+      limit,
+      offset: skip,
+    }),
+    db.select({ value: count() }).from(transportBookings).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function createBooking(data) {
-  return prisma.transportBooking.create({ data, include: bookingInclude });
+  const [created] = await db.insert(transportBookings).values(data).returning();
+  return findBookingById(created.id);
 }
 
 export async function updateBooking(id, data) {
-  return prisma.transportBooking.update({ where: { id }, data, include: bookingInclude });
+  const [updated] = await db.update(transportBookings).set(data).where(eq(transportBookings.id, id)).returning();
+  return updated ? findBookingById(updated.id) : null;
 }
 
 // TransportBooking has no deletedAt column either; "delete" cancels the
-// booking so history/audit trail is preserved.
+// booking so the history/audit trail is preserved.
 export async function cancelBooking(id) {
-  return prisma.transportBooking.update({ where: { id }, data: { status: 'cancelled' }, include: bookingInclude });
+  const [updated] = await db
+    .update(transportBookings)
+    .set({ status: 'cancelled' })
+    .where(eq(transportBookings.id, id))
+    .returning();
+  return updated ? findBookingById(updated.id) : null;
 }

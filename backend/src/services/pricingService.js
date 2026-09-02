@@ -1,5 +1,8 @@
+import { and, eq } from 'drizzle-orm';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { Money, sum, roundCurrency } from '../utils/money.js';
+import { db } from '../db/index.js';
+import { roomRates } from '../db/schema.js';
 
 const BASE_OCCUPANCY_ADULTS = 2;
 const BASE_OCCUPANCY_CHILDREN = 0;
@@ -39,9 +42,18 @@ export async function calculateRoomStayPrice({ tx, roomTypeId, ratePlanId, check
     throw new ValidationError('Check-out date must be after check-in date');
   }
 
-  const rates = await tx.roomRate.findMany({
-    where: { roomTypeId, ...(ratePlanId ? { ratePlanId } : {}) },
-  });
+  // `tx` is the transaction Drizzle handed the caller, so a price quoted inside
+  // the booking lock reads the same snapshot the availability check did.
+  const conn = tx || db;
+  const rates = await conn
+    .select()
+    .from(roomRates)
+    .where(
+      and(
+        eq(roomRates.roomTypeId, roomTypeId),
+        ...(ratePlanId ? [eq(roomRates.ratePlanId, ratePlanId)] : [])
+      )
+    );
 
   if (rates.length === 0) {
     throw new NotFoundError('No pricing configured for this room type in the requested period');

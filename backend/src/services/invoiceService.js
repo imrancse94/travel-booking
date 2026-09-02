@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { prisma } from '../config/prisma.js';
+import { db } from '../db/index.js';
+import { invoiceItems, invoices } from '../db/schema.js';
 import { env } from '../config/env.js';
 import { NotFoundError } from '../utils/errors.js';
 import { Money } from '../utils/money.js';
@@ -27,11 +28,11 @@ export async function getInvoice(id) {
  * re-derived here, only summarized into line items.
  */
 export async function generateInvoiceForBooking(bookingId, actorId) {
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    include: {
-      bookingRooms: { include: { roomType: true } },
-      services: { include: { service: true } },
+  const booking = await db.query.bookings.findFirst({
+    where: (b, { eq }) => eq(b.id, bookingId),
+    with: {
+      bookingRooms: { with: { roomType: true } },
+      services: { with: { service: true } },
       hotel: true,
       customer: true,
     },
@@ -70,10 +71,11 @@ export async function generateInvoiceForBooking(bookingId, actorId) {
     status = 'partially_paid';
   }
 
-  const invoice = await prisma.$transaction(async (tx) => {
+  const invoice = await db.transaction(async (tx) => {
     const invoiceNumber = await generateInvoiceNumber(tx);
-    return tx.invoice.create({
-      data: {
+    const [created] = await tx
+      .insert(invoices)
+      .values({
         invoiceNumber,
         bookingId,
         subtotal: subtotal.toString(),
@@ -84,10 +86,15 @@ export async function generateInvoiceForBooking(bookingId, actorId) {
         dueAmount: dueAmount.toString(),
         currency: booking.currency,
         status,
-        items: { create: itemsData },
-      },
-      include: { items: true },
-    });
+      })
+      .returning();
+
+    // Prisma nested these under the invoice; Drizzle inserts them separately,
+    // still inside the transaction that reserved the invoice number.
+    if (itemsData.length) {
+      await tx.insert(invoiceItems).values(itemsData.map((i) => ({ ...i, invoiceId: created.id })));
+    }
+    return created;
   });
 
   await recordAudit({

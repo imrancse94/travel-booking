@@ -1,4 +1,16 @@
-import { prisma } from '../config/prisma.js';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import {
+  bookingGuests,
+  bookingRooms,
+  bookingServices,
+  bookingStatusHistory,
+  bookings,
+  commissions,
+  rooms as roomsTable,
+  roomTypes,
+  services as servicesTable,
+} from '../db/schema.js';
 import logger from '../config/logger.js';
 import { ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
 import { Money, sum, roundCurrency } from '../utils/money.js';
@@ -18,7 +30,9 @@ import { notify } from '../notifications/notificationService.js';
 async function lockRoomsAndTypes(tx, { roomIds, roomTypeIds }) {
   const keys = [...new Set([...roomIds, ...roomTypeIds.map((id) => `roomtype:${id}`)])].sort();
   for (const key of keys) {
-    await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', key);
+    // Parameterised through Drizzle's sql template, so the key is bound rather
+    // than interpolated -- the same guarantee $executeRawUnsafe's $1 gave.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
   }
 }
 
@@ -40,14 +54,25 @@ async function resolveRoomSelections(tx, { hotelId, rooms, checkIn, checkOut }) 
   const candidatesByType = new Map();
 
   for (const roomTypeId of roomTypeIds) {
-    const roomType = await tx.roomType.findFirst({ where: { id: roomTypeId, deletedAt: null } });
+    const [roomType] = await tx
+      .select()
+      .from(roomTypes)
+      .where(and(eq(roomTypes.id, roomTypeId), sql`${roomTypes.deletedAt} is null`))
+      .limit(1);
     if (!roomType) throw new NotFoundError('Room type not found');
     if (roomType.hotelId !== hotelId) throw new ValidationError('Room type does not belong to the selected hotel');
 
-    const candidates = await tx.room.findMany({
-      where: { roomTypeId, status: { in: ['available', 'occupied'] }, deletedAt: null },
-      orderBy: { roomNumber: 'asc' },
-    });
+    const candidates = await tx
+      .select()
+      .from(roomsTable)
+      .where(
+        and(
+          eq(roomsTable.roomTypeId, roomTypeId),
+          inArray(roomsTable.status, ['available', 'occupied']),
+          sql`${roomsTable.deletedAt} is null`
+        )
+      )
+      .orderBy(roomsTable.roomNumber);
     const overlapping = await findOverlappingRoomIds(tx, {
       roomIds: candidates.map((c) => c.id),
       checkIn,
@@ -122,7 +147,7 @@ export async function createBooking(input) {
     throw new ValidationError('Each room selection needs a roomId or a roomTypeId');
   }
 
-  const result = await prisma.$transaction(
+  const result = await db.transaction(
     async (tx) => {
       await lockRoomsAndTypes(tx, { roomIds: explicitRoomIds, roomTypeIds });
       await assertRoomsAvailable(tx, { roomIds: explicitRoomIds, checkIn, checkOut });
@@ -133,9 +158,9 @@ export async function createBooking(input) {
         throw new ConflictError('The same room cannot be booked twice in one booking');
       }
 
-      const dbRooms = await tx.room.findMany({
-        where: { id: { in: roomIds }, deletedAt: null },
-        include: { roomType: true },
+      const dbRooms = await tx.query.rooms.findMany({
+        where: (r, { and: a, inArray: ia, isNull: nul }) => a(ia(r.id, roomIds), nul(r.deletedAt)),
+        with: { roomType: true },
       });
       if (dbRooms.length !== roomIds.length) {
         throw new NotFoundError('One or more rooms could not be found');
@@ -179,7 +204,10 @@ export async function createBooking(input) {
       }
 
       const serviceCatalog = services.length
-        ? await tx.service.findMany({ where: { id: { in: services.map((s) => s.serviceId) } } })
+        ? await tx
+            .select()
+            .from(servicesTable)
+            .where(inArray(servicesTable.id, services.map((s) => s.serviceId)))
         : [];
 
       const bookingServicesData = services.map((s) => {
@@ -217,8 +245,13 @@ export async function createBooking(input) {
       const initialStatus = immediateConfirm ? 'confirmed' : 'held';
       const holdExpiresAt = immediateConfirm ? null : new Date(Date.now() + env.bookingHoldMinutes * 60 * 1000);
 
-      const booking = await tx.booking.create({
-        data: {
+      // Prisma wrote the booking and its children in one nested `create`.
+      // Drizzle has no nested writes, so they are separate inserts -- still
+      // inside this transaction, so a failure anywhere still rolls back the
+      // whole booking rather than leaving a room half-reserved.
+      const [created] = await tx
+        .insert(bookings)
+        .values({
           bookingNumber,
           hotelId,
           customerId,
@@ -239,45 +272,60 @@ export async function createBooking(input) {
           paidAmount: '0',
           dueAmount: totalAmount.toString(),
           holdExpiresAt,
-          bookingRooms: { create: bookingRoomsData },
-          guests: {
-            create: guests.map((g, idx) => ({
-              firstName: g.firstName,
-              lastName: g.lastName,
-              email: g.email,
-              phone: g.phone,
-              dateOfBirth: g.dateOfBirth ? new Date(g.dateOfBirth) : null,
-              nationality: g.nationality,
-              passportNumber: g.passportNumber,
-              passportExpiry: g.passportExpiry ? new Date(g.passportExpiry) : null,
-              address: g.address,
-              specialRequirements: g.specialRequirements,
-              isPrimary: g.isPrimary ?? idx === 0,
-            })),
-          },
-          services: bookingServicesData.length ? { create: bookingServicesData } : undefined,
-          statusHistory: {
-            create: { toStatus: initialStatus, changedById: createdByUserId, reason: 'Booking created' },
-          },
-        },
-        include: { bookingRooms: true, guests: true, services: true, hotel: true, customer: true },
+        })
+        .returning();
+
+      await tx.insert(bookingRooms).values(bookingRoomsData.map((br) => ({ ...br, bookingId: created.id })));
+
+      await tx.insert(bookingGuests).values(
+        guests.map((g, idx) => ({
+          bookingId: created.id,
+          firstName: g.firstName,
+          lastName: g.lastName,
+          email: g.email,
+          phone: g.phone,
+          dateOfBirth: g.dateOfBirth ? new Date(g.dateOfBirth) : null,
+          nationality: g.nationality,
+          passportNumber: g.passportNumber,
+          passportExpiry: g.passportExpiry ? new Date(g.passportExpiry) : null,
+          address: g.address,
+          specialRequirements: g.specialRequirements,
+          isPrimary: g.isPrimary ?? idx === 0,
+        }))
+      );
+
+      if (bookingServicesData.length) {
+        await tx
+          .insert(bookingServices)
+          .values(bookingServicesData.map((bs) => ({ ...bs, bookingId: created.id })));
+      }
+
+      await tx.insert(bookingStatusHistory).values({
+        bookingId: created.id,
+        toStatus: initialStatus,
+        changedById: createdByUserId,
+        reason: 'Booking created',
       });
 
       if (agentId && commissionAmount.greaterThan(0)) {
-        await tx.commission.create({
-          data: {
-            agentId,
-            bookingId: booking.id,
-            percentage: effectiveCommissionPercent.toString(),
-            amount: commissionAmount.toString(),
-            status: 'pending',
-          },
+        await tx.insert(commissions).values({
+          agentId,
+          bookingId: created.id,
+          percentage: effectiveCommissionPercent.toString(),
+          amount: commissionAmount.toString(),
+          status: 'pending',
         });
       }
 
-      return booking;
+      // Re-read with the relations the caller (and the API response) expects.
+      return tx.query.bookings.findFirst({
+        where: (b, { eq: e }) => e(b.id, created.id),
+        with: { bookingRooms: true, guests: true, services: true, hotel: true, customer: true },
+      });
     },
-    { isolationLevel: 'ReadCommitted' }
+    // Prisma's 'ReadCommitted'. The guard does not lean on isolation level --
+    // the advisory lock is what serialises competing bookings.
+    { isolationLevel: 'read committed' }
   );
 
   await recordAudit({ userId: createdByUserId, action: 'booking.created', entity: 'Booking', entityId: result.id, newValue: { bookingNumber: result.bookingNumber, status: result.status } });
@@ -306,15 +354,22 @@ export async function createBooking(input) {
 }
 
 async function transitionStatus(tx, booking, toStatus, { changedById, reason } = {}) {
-  await tx.booking.update({ where: { id: booking.id }, data: { status: toStatus } });
-  await tx.bookingStatusHistory.create({
-    data: { bookingId: booking.id, fromStatus: booking.status, toStatus, changedById, reason },
+  await tx.update(bookings).set({ status: toStatus }).where(eq(bookings.id, booking.id));
+  await tx.insert(bookingStatusHistory).values({
+    bookingId: booking.id,
+    fromStatus: booking.status,
+    toStatus,
+    changedById,
+    reason,
   });
 }
 
 export async function confirmBookingAfterPayment(bookingId, { changedById } = {}) {
-  const confirmed = await prisma.$transaction(async (tx) => {
-    const booking = await tx.booking.findUnique({ where: { id: bookingId }, include: { customer: true, hotel: true } });
+  const confirmed = await db.transaction(async (tx) => {
+    const booking = await tx.query.bookings.findFirst({
+      where: (b, { eq: e }) => e(b.id, bookingId),
+      with: { customer: true, hotel: true },
+    });
     if (!booking) throw new NotFoundError('Booking not found');
     if (!['held', 'pending'].includes(booking.status)) {
       throw new ConflictError(`Booking cannot be confirmed from status ${booking.status}`);
@@ -354,14 +409,16 @@ export async function confirmBookingAfterPayment(bookingId, { changedById } = {}
 }
 
 export async function releaseExpiredHolds() {
-  const expired = await prisma.booking.findMany({
-    where: { status: 'held', holdExpiresAt: { lt: new Date() } },
-    select: { id: true, status: true },
-  });
+  const expired = await db
+    .select({ id: bookings.id, status: bookings.status })
+    .from(bookings)
+    .where(and(eq(bookings.status, 'held'), lt(bookings.holdExpiresAt, new Date())));
 
   for (const booking of expired) {
-    await prisma.$transaction(async (tx) => {
-      const fresh = await tx.booking.findUnique({ where: { id: booking.id } });
+    await db.transaction(async (tx) => {
+      // Re-read inside the transaction: the hold may have been paid for
+      // between the scan above and this update.
+      const [fresh] = await tx.select().from(bookings).where(eq(bookings.id, booking.id)).limit(1);
       if (!fresh || fresh.status !== 'held') return;
       await transitionStatus(tx, fresh, 'cancelled', { reason: 'Hold expired' });
     });
@@ -394,8 +451,11 @@ export async function calculateCancellation(booking, settings) {
 export async function cancelBooking(bookingId, { reason, changedById } = {}) {
   const settings = await getSettings();
 
-  const result = await prisma.$transaction(async (tx) => {
-    const booking = await tx.booking.findUnique({ where: { id: bookingId }, include: { customer: true } });
+  const result = await db.transaction(async (tx) => {
+    const booking = await tx.query.bookings.findFirst({
+      where: (b, { eq: e }) => e(b.id, bookingId),
+      with: { customer: true },
+    });
     if (!booking) throw new NotFoundError('Booking not found');
     if (['cancelled', 'checked_out', 'completed'].includes(booking.status)) {
       throw new ConflictError(`Booking is already ${booking.status}`);
@@ -406,19 +466,28 @@ export async function cancelBooking(bookingId, { reason, changedById } = {}) {
     // Return the *updated* row (not the pre-update `booking`), so the API
     // response reflects the cancelled status/cancelledAt the caller just
     // caused -- same pattern as checkInBooking/checkOutBooking below.
-    const cancelled = await tx.booking.update({
-      where: { id: bookingId },
-      data: {
+    await tx
+      .update(bookings)
+      .set({
         status: 'cancelled',
         cancelledAt: new Date(),
         cancellationFee: cancellationFee.toString(),
         refundableAmount: refundableAmount.toString(),
         cancellationReason: reason,
-      },
-      include: { customer: true },
+      })
+      .where(eq(bookings.id, bookingId));
+
+    const cancelled = await tx.query.bookings.findFirst({
+      where: (b, { eq: e }) => e(b.id, bookingId),
+      with: { customer: true },
     });
-    await tx.bookingStatusHistory.create({
-      data: { bookingId, fromStatus: booking.status, toStatus: 'cancelled', changedById, reason },
+
+    await tx.insert(bookingStatusHistory).values({
+      bookingId,
+      fromStatus: booking.status,
+      toStatus: 'cancelled',
+      changedById,
+      reason,
     });
 
     return { ...cancelled, cancellationFee, refundableAmount };
@@ -447,45 +516,61 @@ export async function cancelBooking(bookingId, { reason, changedById } = {}) {
 }
 
 export async function checkInBooking(bookingId, { staffUserId, notes } = {}) {
-  return prisma.$transaction(async (tx) => {
-    const booking = await tx.booking.findUnique({ where: { id: bookingId }, include: { bookingRooms: true } });
+  return db.transaction(async (tx) => {
+    const booking = await tx.query.bookings.findFirst({
+      where: (b, { eq: e }) => e(b.id, bookingId),
+      with: { bookingRooms: true },
+    });
     if (!booking) throw new NotFoundError('Booking not found');
     if (booking.status !== 'confirmed') {
       throw new ConflictError(`Only confirmed bookings can be checked in (current: ${booking.status})`);
     }
 
-    await tx.bookingRoom.updateMany({
-      where: { bookingId },
-      data: { actualCheckIn: new Date(), checkedInById: staffUserId, notes },
-    });
-    await tx.room.updateMany({
-      where: { id: { in: booking.bookingRooms.map((br) => br.roomId) } },
-      data: { status: 'occupied' },
-    });
+    await tx
+      .update(bookingRooms)
+      .set({ actualCheckIn: new Date(), checkedInById: staffUserId, notes })
+      .where(eq(bookingRooms.bookingId, bookingId));
+
+    await tx
+      .update(roomsTable)
+      .set({ status: 'occupied' })
+      .where(inArray(roomsTable.id, booking.bookingRooms.map((br) => br.roomId)));
+
     await transitionStatus(tx, booking, 'checked_in', { changedById: staffUserId, reason: 'Guest checked in' });
 
-    return tx.booking.findUnique({ where: { id: bookingId }, include: { bookingRooms: true } });
+    return tx.query.bookings.findFirst({
+      where: (b, { eq: e }) => e(b.id, bookingId),
+      with: { bookingRooms: true },
+    });
   });
 }
 
 export async function checkOutBooking(bookingId, { staffUserId, notes } = {}) {
-  return prisma.$transaction(async (tx) => {
-    const booking = await tx.booking.findUnique({ where: { id: bookingId }, include: { bookingRooms: true } });
+  return db.transaction(async (tx) => {
+    const booking = await tx.query.bookings.findFirst({
+      where: (b, { eq: e }) => e(b.id, bookingId),
+      with: { bookingRooms: true },
+    });
     if (!booking) throw new NotFoundError('Booking not found');
     if (booking.status !== 'checked_in') {
       throw new ConflictError(`Only checked-in bookings can be checked out (current: ${booking.status})`);
     }
 
-    await tx.bookingRoom.updateMany({
-      where: { bookingId },
-      data: { actualCheckOut: new Date(), checkedOutById: staffUserId, notes },
-    });
-    await tx.room.updateMany({
-      where: { id: { in: booking.bookingRooms.map((br) => br.roomId) } },
-      data: { status: 'available' },
-    });
+    await tx
+      .update(bookingRooms)
+      .set({ actualCheckOut: new Date(), checkedOutById: staffUserId, notes })
+      .where(eq(bookingRooms.bookingId, bookingId));
+
+    await tx
+      .update(roomsTable)
+      .set({ status: 'available' })
+      .where(inArray(roomsTable.id, booking.bookingRooms.map((br) => br.roomId)));
+
     await transitionStatus(tx, booking, 'checked_out', { changedById: staffUserId, reason: 'Guest checked out' });
 
-    return tx.booking.findUnique({ where: { id: bookingId }, include: { bookingRooms: true } });
+    return tx.query.bookings.findFirst({
+      where: (b, { eq: e }) => e(b.id, bookingId),
+      with: { bookingRooms: true },
+    });
   });
 }

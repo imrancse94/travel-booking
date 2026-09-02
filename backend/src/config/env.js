@@ -18,6 +18,11 @@ export const env = {
   databaseUrl: required('DATABASE_URL', 'postgresql://booking_user:booking_password@localhost:5432/booking_db'),
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
 
+  // Must exceed the number of bookings that can be in flight at once: the
+  // double-booking guard holds a connection per transaction while it waits on
+  // its advisory lock.
+  databasePoolMax: Number(process.env.DATABASE_POOL_MAX || 25),
+
   jwt: {
     secret: required('JWT_SECRET', 'dev-secret'),
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',

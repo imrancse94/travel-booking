@@ -25,12 +25,10 @@ export async function createUser({ roleIds = [], password, ...data }, actorId) {
   if (existing) throw new ConflictError('A user with this email already exists');
 
   const passwordHash = await bcryptHasher.hash(password);
-  const user = await userRepository.createUser({
-    ...data,
-    passwordHash,
-    isEmailVerified: true,
-    userRoles: { create: roleIds.map((roleId) => ({ roleId })) },
-  });
+  const user = await userRepository.createUser(
+    { ...data, passwordHash, isEmailVerified: true },
+    roleIds
+  );
 
   await recordAudit({ userId: actorId, action: 'user.created', entity: 'User', entityId: user.id, newValue: { email: user.email } });
   return sanitize(user);

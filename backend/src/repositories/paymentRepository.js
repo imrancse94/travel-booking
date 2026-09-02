@@ -1,52 +1,76 @@
-import { prisma } from '../config/prisma.js';
+import { and, count, desc, eq, gte, inArray, lte, ilike, or } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { bookings, payments } from '../db/schema.js';
 
-const fullInclude = {
-  booking: { select: { id: true, bookingNumber: true, currency: true, totalAmount: true, customerId: true } },
+const withBookingAndRefunds = {
+  booking: { columns: { id: true, bookingNumber: true, currency: true, totalAmount: true, customerId: true } },
   refunds: true,
 };
 
 export async function findById(id) {
-  return prisma.payment.findUnique({ where: { id }, include: fullInclude });
+  const row = await db.query.payments.findFirst({
+    where: eq(payments.id, id),
+    with: withBookingAndRefunds,
+  });
+  return row ?? null;
 }
 
-export async function list({ page, limit, skip, search, bookingId, customerId, status, method, dateFrom, dateTo }) {
-  const where = {
-    ...(bookingId ? { bookingId } : {}),
-    ...(customerId ? { booking: { customerId } } : {}),
-    ...(status ? { status } : {}),
-    ...(method ? { method } : {}),
-    ...(dateFrom || dateTo
-      ? {
-          createdAt: {
-            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-            ...(dateTo ? { lte: new Date(dateTo) } : {}),
-          },
-        }
-      : {}),
-    ...(search
-      ? {
-          OR: [
-            { transactionId: { contains: search, mode: 'insensitive' } },
-            { booking: { bookingNumber: { contains: search, mode: 'insensitive' } } },
-          ],
-        }
-      : {}),
-  };
+/**
+ * `customerId` and the booking-number search reach through the booking
+ * relation, which Prisma could express inline. Drizzle's relational API cannot
+ * filter a parent by its relation, so those narrow to a set of booking ids
+ * first and the main query filters on that.
+ */
+async function bookingIdsFor({ customerId, search }) {
+  if (!customerId && !search) return null;
+  const filters = [
+    customerId ? eq(bookings.customerId, customerId) : null,
+    search ? ilike(bookings.bookingNumber, `%${search}%`) : null,
+  ].filter(Boolean);
+  const rows = await db.select({ id: bookings.id }).from(bookings).where(and(...filters));
+  return rows.map((r) => r.id);
+}
 
-  const [items, total] = await Promise.all([
-    prisma.payment.findMany({
+export async function list({ limit, skip, search, bookingId, customerId, status, method, dateFrom, dateTo }) {
+  // A search matches either the payment's own transaction id or its booking
+  // number, so the booking-id set widens the match rather than narrowing it.
+  const searchBookingIds = await bookingIdsFor({ search });
+  const customerBookingIds = customerId ? await bookingIdsFor({ customerId }) : null;
+  if (customerBookingIds && customerBookingIds.length === 0) return { items: [], total: 0 };
+
+  const searchClause = search
+    ? or(
+        ilike(payments.transactionId, `%${search}%`),
+        ...(searchBookingIds?.length ? [inArray(payments.bookingId, searchBookingIds)] : [])
+      )
+    : null;
+
+  const filters = [
+    bookingId ? eq(payments.bookingId, bookingId) : null,
+    customerBookingIds ? inArray(payments.bookingId, customerBookingIds) : null,
+    status ? eq(payments.status, status) : null,
+    method ? eq(payments.method, method) : null,
+    dateFrom ? gte(payments.createdAt, new Date(dateFrom)) : null,
+    dateTo ? lte(payments.createdAt, new Date(dateTo)) : null,
+    searchClause,
+  ].filter(Boolean);
+  const where = filters.length ? and(...filters) : undefined;
+
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.payments.findMany({
       where,
-      include: fullInclude,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
+      with: withBookingAndRefunds,
+      orderBy: desc(payments.createdAt),
+      limit,
+      offset: skip,
     }),
-    prisma.payment.count({ where }),
+    db.select({ value: count() }).from(payments).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function create(data) {
-  return prisma.payment.create({ data });
+  const [row] = await db.insert(payments).values(data).returning();
+  return row;
 }

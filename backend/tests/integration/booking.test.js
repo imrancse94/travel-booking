@@ -74,7 +74,11 @@ describe('booking lifecycle', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.customerId).toBe(customerA.customer.id);
-    expect(res.body.data.totalAmount).toBe('150'); // 3 nights * 50, discount ignored
+    // numeric(12,2) now serialises at its real scale. Prisma returned a Decimal
+    // whose toJSON stripped trailing zeros ('150'), so the same column came back
+    // as '150' or '150.50' depending on the value; Drizzle returns what Postgres
+    // stores. The amount is identical -- only the representation is consistent now.
+    expect(res.body.data.totalAmount).toBe('150.00'); // 3 nights * 50, discount ignored
     expect(res.body.data.status).toBe('held');
     expect(res.body.data.bookingRooms).toHaveLength(1);
   });

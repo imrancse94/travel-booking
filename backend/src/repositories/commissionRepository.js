@@ -1,41 +1,55 @@
-import { prisma } from '../config/prisma.js';
+import { and, count, desc, eq, gte, lte } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { commissions } from '../db/schema.js';
 
-const fullInclude = {
-  agent: { select: { id: true, firstName: true, lastName: true, email: true } },
-  booking: { select: { id: true, bookingNumber: true, totalAmount: true, currency: true } },
+// The shape Prisma's `include` produced, so API responses are unchanged.
+const withAgentAndBooking = {
+  agent: { columns: { id: true, firstName: true, lastName: true, email: true } },
+  booking: { columns: { id: true, bookingNumber: true, totalAmount: true, currency: true } },
 };
 
 export async function findById(id) {
-  return prisma.commission.findUnique({ where: { id }, include: fullInclude });
+  const row = await db.query.commissions.findFirst({
+    where: eq(commissions.id, id),
+    with: withAgentAndBooking,
+  });
+  return row ?? null;
 }
 
-export async function list({ page, limit, skip, agentId, status, bookingId, dateFrom, dateTo }) {
-  const where = {
-    ...(agentId ? { agentId } : {}),
-    ...(status ? { status } : {}),
-    ...(bookingId ? { bookingId } : {}),
-    ...(dateFrom || dateTo
-      ? {
-          createdAt: {
-            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-            ...(dateTo ? { lte: new Date(dateTo) } : {}),
-          },
-        }
-      : {}),
-  };
+function buildWhere({ agentId, status, bookingId, dateFrom, dateTo }) {
+  const filters = [
+    agentId ? eq(commissions.agentId, agentId) : null,
+    status ? eq(commissions.status, status) : null,
+    bookingId ? eq(commissions.bookingId, bookingId) : null,
+    dateFrom ? gte(commissions.createdAt, new Date(dateFrom)) : null,
+    dateTo ? lte(commissions.createdAt, new Date(dateTo)) : null,
+  ].filter(Boolean);
+  return filters.length ? and(...filters) : undefined;
+}
 
-  const [items, total] = await Promise.all([
-    prisma.commission.findMany({ where, include: fullInclude, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-    prisma.commission.count({ where }),
+export async function list({ limit, skip, ...filters }) {
+  const where = buildWhere(filters);
+
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.commissions.findMany({
+      where,
+      with: withAgentAndBooking,
+      orderBy: desc(commissions.createdAt),
+      limit,
+      offset: skip,
+    }),
+    db.select({ value: count() }).from(commissions).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function create(data) {
-  return prisma.commission.create({ data, include: fullInclude });
+  const [created] = await db.insert(commissions).values(data).returning();
+  return findById(created.id);
 }
 
 export async function updateStatus(id, data) {
-  return prisma.commission.update({ where: { id }, data, include: fullInclude });
+  const [updated] = await db.update(commissions).set(data).where(eq(commissions.id, id)).returning();
+  return updated ? findById(updated.id) : null;
 }

@@ -1,65 +1,81 @@
-import { prisma } from '../config/prisma.js';
+import { and, asc, count, desc, eq, ilike } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { ratePlans, roomRates } from '../db/schema.js';
 
 export async function findById(id) {
-  return prisma.ratePlan.findUnique({ where: { id } });
+  const [row] = await db.select().from(ratePlans).where(eq(ratePlans.id, id)).limit(1);
+  return row ?? null;
 }
 
-export async function list({ page, limit, skip, search, type }) {
-  const where = {
-    ...(type ? { type } : {}),
-    ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
-  };
+export async function list({ limit, skip, search, type }) {
+  const filters = [
+    type ? eq(ratePlans.type, type) : null,
+    search ? ilike(ratePlans.name, `%${search}%`) : null,
+  ].filter(Boolean);
+  const where = filters.length ? and(...filters) : undefined;
 
-  const [items, total] = await Promise.all([
-    prisma.ratePlan.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-    prisma.ratePlan.count({ where }),
+  const [items, [{ value: total }]] = await Promise.all([
+    db.select().from(ratePlans).where(where).orderBy(desc(ratePlans.createdAt)).limit(limit).offset(skip),
+    db.select({ value: count() }).from(ratePlans).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function create(data) {
-  return prisma.ratePlan.create({ data });
+  const [row] = await db.insert(ratePlans).values(data).returning();
+  return row;
 }
 
 export async function update(id, data) {
-  return prisma.ratePlan.update({ where: { id }, data });
+  const [row] = await db.update(ratePlans).set(data).where(eq(ratePlans.id, id)).returning();
+  return row ?? null;
 }
 
 export async function remove(id) {
-  return prisma.ratePlan.delete({ where: { id } });
+  const [row] = await db.delete(ratePlans).where(eq(ratePlans.id, id)).returning();
+  return row ?? null;
 }
 
 // -- Room rates (scoped to a room type / rate plan pair) --
 
 export async function findRoomRateById(id) {
-  return prisma.roomRate.findUnique({ where: { id }, include: { roomType: true, ratePlan: true } });
+  const row = await db.query.roomRates.findFirst({
+    where: eq(roomRates.id, id),
+    with: { roomType: true, ratePlan: true },
+  });
+  return row ?? null;
 }
 
-export async function listRoomRatesForRoomType(roomTypeId, { page, limit, skip } = {}) {
-  const where = { roomTypeId };
+export async function listRoomRatesForRoomType(roomTypeId, { limit, skip } = {}) {
+  const where = eq(roomRates.roomTypeId, roomTypeId);
+  // The caller omits paging when it wants every rate for a room type.
+  const paging = skip !== undefined && limit !== undefined ? { limit, offset: skip } : {};
 
-  const [items, total] = await Promise.all([
-    prisma.roomRate.findMany({
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.roomRates.findMany({
       where,
-      include: { ratePlan: true },
-      orderBy: [{ startDate: 'asc' }, { priority: 'desc' }],
-      ...(skip !== undefined && limit !== undefined ? { skip, take: limit } : {}),
+      with: { ratePlan: true },
+      orderBy: [asc(roomRates.startDate), desc(roomRates.priority)],
+      ...paging,
     }),
-    prisma.roomRate.count({ where }),
+    db.select({ value: count() }).from(roomRates).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function createRoomRate(data) {
-  return prisma.roomRate.create({ data, include: { ratePlan: true } });
+  const [created] = await db.insert(roomRates).values(data).returning();
+  return findRoomRateById(created.id);
 }
 
 export async function updateRoomRate(id, data) {
-  return prisma.roomRate.update({ where: { id }, data, include: { ratePlan: true } });
+  const [updated] = await db.update(roomRates).set(data).where(eq(roomRates.id, id)).returning();
+  return updated ? findRoomRateById(updated.id) : null;
 }
 
 export async function removeRoomRate(id) {
-  return prisma.roomRate.delete({ where: { id } });
+  const [row] = await db.delete(roomRates).where(eq(roomRates.id, id)).returning();
+  return row ?? null;
 }

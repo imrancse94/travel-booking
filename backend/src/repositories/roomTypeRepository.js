@@ -1,77 +1,121 @@
-import { prisma } from '../config/prisma.js';
+import { and, count, desc, eq, ilike, isNull } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { roomTypeAmenities, roomTypeImages, roomTypes } from '../db/schema.js';
 
-const detailInclude = {
-  hotel: { select: { id: true, name: true, city: true, country: true } },
-  images: { orderBy: { sortOrder: 'asc' } },
-  amenities: { include: { amenity: true } },
+const detailRelations = {
+  hotel: { columns: { id: true, name: true, city: true, country: true } },
+  images: { orderBy: (i, { asc }) => [asc(i.sortOrder)] },
+  amenities: { with: { amenity: true } },
 };
 
+const notDeleted = isNull(roomTypes.deletedAt);
+
 export async function findById(id) {
-  return prisma.roomType.findFirst({ where: { id, deletedAt: null }, include: detailInclude });
+  const row = await db.query.roomTypes.findFirst({
+    where: and(eq(roomTypes.id, id), notDeleted),
+    with: detailRelations,
+  });
+  return row ?? null;
 }
 
-// Lighter lookup for existence checks / FK validation from other services, without the full include tree.
+// Lighter lookup for existence checks / FK validation, without the relation tree.
 export async function findByIdRaw(id) {
-  return prisma.roomType.findFirst({ where: { id, deletedAt: null } });
+  const [row] = await db
+    .select()
+    .from(roomTypes)
+    .where(and(eq(roomTypes.id, id), notDeleted))
+    .limit(1);
+  return row ?? null;
 }
 
-export async function list({ page, limit, skip, search, hotelId }) {
-  const where = {
-    deletedAt: null,
-    ...(hotelId ? { hotelId } : {}),
-    ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
-  };
+export async function list({ limit, skip, search, hotelId }) {
+  const filters = [
+    notDeleted,
+    hotelId ? eq(roomTypes.hotelId, hotelId) : null,
+    search ? ilike(roomTypes.name, `%${search}%`) : null,
+  ].filter(Boolean);
+  const where = and(...filters);
 
-  const [items, total] = await Promise.all([
-    prisma.roomType.findMany({ where, include: detailInclude, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-    prisma.roomType.count({ where }),
+  const [items, [{ value: total }]] = await Promise.all([
+    db.query.roomTypes.findMany({
+      where,
+      with: detailRelations,
+      orderBy: desc(roomTypes.createdAt),
+      limit,
+      offset: skip,
+    }),
+    db.select({ value: count() }).from(roomTypes).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function create(data) {
-  return prisma.roomType.create({ data, include: detailInclude });
+  const [created] = await db.insert(roomTypes).values(data).returning();
+  return findById(created.id);
 }
 
 export async function update(id, data) {
-  return prisma.roomType.update({ where: { id }, data, include: detailInclude });
+  const [updated] = await db.update(roomTypes).set(data).where(eq(roomTypes.id, id)).returning();
+  return updated ? findById(updated.id) : null;
 }
 
 export async function softDelete(id) {
-  return prisma.roomType.update({ where: { id }, data: { deletedAt: new Date() } });
+  const [row] = await db
+    .update(roomTypes)
+    .set({ deletedAt: new Date() })
+    .where(eq(roomTypes.id, id))
+    .returning();
+  return row ?? null;
 }
 
 export async function addImage(roomTypeId, data) {
-  return prisma.roomTypeImage.create({ data: { roomTypeId, ...data } });
+  const [row] = await db.insert(roomTypeImages).values({ roomTypeId, ...data }).returning();
+  return row;
 }
 
 export async function findImage(roomTypeId, imageId) {
-  return prisma.roomTypeImage.findFirst({ where: { id: imageId, roomTypeId } });
+  const [row] = await db
+    .select()
+    .from(roomTypeImages)
+    .where(and(eq(roomTypeImages.id, imageId), eq(roomTypeImages.roomTypeId, roomTypeId)))
+    .limit(1);
+  return row ?? null;
 }
 
 export async function removeImage(imageId) {
-  return prisma.roomTypeImage.delete({ where: { id: imageId } });
+  const [row] = await db.delete(roomTypeImages).where(eq(roomTypeImages.id, imageId)).returning();
+  return row ?? null;
 }
 
+// The composite primary key Prisma addressed as roomTypeId_amenityId.
+const amenityKey = (roomTypeId, amenityId) =>
+  and(eq(roomTypeAmenities.roomTypeId, roomTypeId), eq(roomTypeAmenities.amenityId, amenityId));
+
 export async function findRoomTypeAmenity(roomTypeId, amenityId) {
-  return prisma.roomTypeAmenity.findUnique({ where: { roomTypeId_amenityId: { roomTypeId, amenityId } } });
+  const [row] = await db.select().from(roomTypeAmenities).where(amenityKey(roomTypeId, amenityId)).limit(1);
+  return row ?? null;
 }
 
 export async function addAmenity(roomTypeId, amenityId) {
-  return prisma.roomTypeAmenity.create({ data: { roomTypeId, amenityId }, include: { amenity: true } });
+  const [row] = await db.insert(roomTypeAmenities).values({ roomTypeId, amenityId }).returning();
+  return row;
 }
 
 export async function removeAmenity(roomTypeId, amenityId) {
-  return prisma.roomTypeAmenity.delete({ where: { roomTypeId_amenityId: { roomTypeId, amenityId } } });
+  const [row] = await db.delete(roomTypeAmenities).where(amenityKey(roomTypeId, amenityId)).returning();
+  return row ?? null;
 }
 
 export async function setAmenities(roomTypeId, amenityIds) {
-  return prisma.$transaction([
-    prisma.roomTypeAmenity.deleteMany({ where: { roomTypeId } }),
-    prisma.roomTypeAmenity.createMany({
-      data: amenityIds.map((amenityId) => ({ roomTypeId, amenityId })),
-      skipDuplicates: true,
-    }),
-  ]);
+  return db.transaction(async (tx) => {
+    await tx.delete(roomTypeAmenities).where(eq(roomTypeAmenities.roomTypeId, roomTypeId));
+    if (amenityIds.length === 0) return [];
+    // Prisma's skipDuplicates; the pair is the primary key.
+    return tx
+      .insert(roomTypeAmenities)
+      .values(amenityIds.map((amenityId) => ({ roomTypeId, amenityId })))
+      .onConflictDoNothing()
+      .returning();
+  });
 }

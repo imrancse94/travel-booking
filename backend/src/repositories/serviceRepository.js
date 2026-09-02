@@ -1,35 +1,46 @@
-import { prisma } from '../config/prisma.js';
+import { and, asc, count, eq, ilike } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { bookingServices, services } from '../db/schema.js';
 
 export async function findById(id) {
-  return prisma.service.findUnique({ where: { id } });
+  const [row] = await db.select().from(services).where(eq(services.id, id)).limit(1);
+  return row ?? null;
 }
 
-export async function list({ page, limit, skip, search, status }) {
-  const where = {
-    ...(status ? { status } : {}),
-    ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
-  };
+export async function list({ limit, skip, search, status }) {
+  const filters = [
+    status ? eq(services.status, status) : null,
+    search ? ilike(services.name, `%${search}%`) : null,
+  ].filter(Boolean);
+  const where = filters.length ? and(...filters) : undefined;
 
-  const [items, total] = await Promise.all([
-    prisma.service.findMany({ where, orderBy: { name: 'asc' }, skip, take: limit }),
-    prisma.service.count({ where }),
+  const [items, [{ value: total }]] = await Promise.all([
+    db.select().from(services).where(where).orderBy(asc(services.name)).limit(limit).offset(skip),
+    db.select({ value: count() }).from(services).where(where),
   ]);
 
   return { items, total };
 }
 
 export async function create(data) {
-  return prisma.service.create({ data });
+  const [row] = await db.insert(services).values(data).returning();
+  return row;
 }
 
 export async function update(id, data) {
-  return prisma.service.update({ where: { id }, data });
+  const [row] = await db.update(services).set(data).where(eq(services.id, id)).returning();
+  return row ?? null;
 }
 
 export async function remove(id) {
-  return prisma.service.delete({ where: { id } });
+  const [row] = await db.delete(services).where(eq(services.id, id)).returning();
+  return row ?? null;
 }
 
 export async function countBookingUsage(id) {
-  return prisma.bookingService.count({ where: { serviceId: id } });
+  const [{ value }] = await db
+    .select({ value: count() })
+    .from(bookingServices)
+    .where(eq(bookingServices.serviceId, id));
+  return value;
 }
