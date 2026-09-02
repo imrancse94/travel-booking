@@ -26,6 +26,26 @@ const PROTECTED = [
 
 const API_BASE = process.env.API_INTERNAL_URL || 'http://localhost:4000/api/v1';
 
+/**
+ * `/admin` has no page of its own; it is an alias for the dashboard.
+ *
+ * This used to be an app/admin/page.jsx calling redirect(), but an
+ * unconditional redirect has no business rendering a React component: the
+ * NEXT_REDIRECT it throws aborts the performance.measure() React 19 opens
+ * around every render, which surfaced in the console as "Failed to execute
+ * 'measure' on 'Performance': 'Page' cannot have a negative time stamp".
+ *
+ * Doing it here also keeps it to a single hop -- a next.config redirect would
+ * run before this middleware, so a signed-out visitor would bounce through
+ * /admin/dashboard on the way to /login.
+ */
+function adminIndexRedirect(req) {
+  if (req.nextUrl.pathname !== '/admin') return null;
+  const url = req.nextUrl.clone();
+  url.pathname = '/admin/dashboard';
+  return NextResponse.redirect(url);
+}
+
 function loginRedirect(req) {
   const target = req.nextUrl.pathname + (req.nextUrl.search || '');
   const url = req.nextUrl.clone();
@@ -48,7 +68,7 @@ export async function middleware(req) {
   }
 
   if (req.cookies.get('accessToken')?.value) {
-    return NextResponse.next();
+    return adminIndexRedirect(req) ?? NextResponse.next();
   }
 
   const refreshToken = req.cookies.get('refreshToken')?.value;
