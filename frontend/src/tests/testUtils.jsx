@@ -1,7 +1,5 @@
-import { configureStore } from '@reduxjs/toolkit';
 import { render } from '@testing-library/react';
-import { Provider } from 'react-redux';
-import authReducer from '../store/authSlice.js';
+import { SessionProvider, useAuth } from '../contexts/AuthContext.jsx';
 import { ToastProvider } from '../components/ui/index.js';
 import { routerMock, setNavigation } from './navigationMock.js';
 
@@ -47,38 +45,39 @@ export const SUPER_ADMIN_USER = {
   permissions: [],
 };
 
-export function makeStore(auth = {}) {
-  return configureStore({
-    reducer: { auth: authReducer },
-    preloadedState: { auth: { user: null, isLoading: false, ...auth } },
-  });
-}
-
 /**
  * `pathname`/`search`/`params` set what next/navigation reports to the tree,
  * replacing what <MemoryRouter initialEntries> used to express. Assert
  * navigation through the returned `router` spies.
  */
+/** Reports the live session so tests can assert on it after a sign-in. */
+function SessionProbe({ onChange }) {
+  const { user } = useAuth();
+  onChange(user);
+  return null;
+}
+
 export function renderWithProviders(
   ui,
-  {
-    user = null,
-    isLoading = false,
-    pathname = '/',
-    search = '',
-    params = {},
-    store = makeStore({ user, isLoading }),
-  } = {}
+  { user = null, pathname = '/', search = '', params = {} } = {}
 ) {
   setNavigation({ pathname, search, params });
 
+  // The server resolves the session and passes it down, so a test supplies it
+  // the same way rather than seeding a store.
+  let current = user;
+  const getUser = () => current;
+
   function Wrapper({ children }) {
     return (
-      <Provider store={store}>
-        <ToastProvider>{children}</ToastProvider>
-      </Provider>
+      <SessionProvider session={user}>
+        <ToastProvider>
+          <SessionProbe onChange={(u) => { current = u; }} />
+          {children}
+        </ToastProvider>
+      </SessionProvider>
     );
   }
 
-  return { store, router: routerMock, ...render(ui, { wrapper: Wrapper }) };
+  return { getUser, router: routerMock, ...render(ui, { wrapper: Wrapper }) };
 }

@@ -1,5 +1,5 @@
-import { Suspense } from 'react';
 import { Providers } from './providers.jsx';
+import { getSession } from '../lib/session.js';
 import '../styles/index.css';
 
 export const metadata = {
@@ -14,19 +14,29 @@ export const viewport = {
 };
 
 /**
- * Replaces index.html plus main.jsx's provider stack.
+ * Server component. It resolves the session from the request's cookies and
+ * hands it to the client providers, so the first paint already knows who is
+ * signed in -- no bootstrap request, no signed-out flash.
  *
- * The Suspense boundary is required, not cosmetic: AuthGate and several pages
- * call useSearchParams(), and Next refuses to prerender a route that reads
- * search params without a boundary above it.
+ * Reading cookies opts the whole tree into dynamic rendering. That is the
+ * deliberate trade for server-side auth: a page whose content depends on who is
+ * asking cannot also be a build-time static file.
+ *
+ * There is deliberately NO Suspense boundary here. One used to be required
+ * because useSearchParams() cannot be statically prerendered -- but reading
+ * cookies above already makes every route dynamic, so that constraint is gone.
+ * Worse, a boundary at the root CATCHES the NEXT_REDIRECT that redirect()
+ * throws: `/admin` degraded from a clean 307 into a rendered 404 plus a
+ * one-second meta-refresh ("switched to client rendering because the server
+ * rendering errored: NEXT_REDIRECT").
  */
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const session = await getSession();
+
   return (
     <html lang="en">
       <body>
-        <Providers>
-          <Suspense>{children}</Suspense>
-        </Providers>
+        <Providers session={session}>{children}</Providers>
       </body>
     </html>
   );

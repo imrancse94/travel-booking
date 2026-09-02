@@ -33,14 +33,14 @@ describe('Login page', () => {
   it('submits the credentials and stores the returned session', async () => {
     authService.login.mockResolvedValue(CUSTOMER_USER);
     const user = userEvent.setup();
-    const { store } = renderLogin();
+    const { getUser } = renderLogin();
 
     await user.type(screen.getByLabelText(/email/i), 'customer@example.com');
     await user.type(screen.getByLabelText(/password/i), 'Customer@12345');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     expect(authService.login).toHaveBeenCalledWith('customer@example.com', 'Customer@12345');
-    await waitFor(() => expect(store.getState().auth.user).toEqual(CUSTOMER_USER));
+    await waitFor(() => expect(getUser()).toEqual(CUSTOMER_USER));
   });
 
   it('redirects to the home page after a successful login', async () => {
@@ -84,7 +84,7 @@ describe('Login page', () => {
   it('shows the API error message and stays on the page when login fails', async () => {
     authService.login.mockRejectedValue(new Error('Invalid email or password'));
     const user = userEvent.setup();
-    const { store } = renderLogin();
+    const { getUser } = renderLogin();
 
     await user.type(screen.getByLabelText(/email/i), 'customer@example.com');
     await user.type(screen.getByLabelText(/password/i), 'wrong-password');
@@ -92,6 +92,6 @@ describe('Login page', () => {
 
     expect(await screen.findByText('Invalid email or password')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument();
-    expect(store.getState().auth.user).toBeNull();
+    expect(getUser()).toBeNull();
   });
 });

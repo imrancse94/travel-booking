@@ -9,6 +9,11 @@ import { renderWithProviders, CUSTOMER_USER, AGENT_USER, SUPER_ADMIN_USER } from
  * job across two components -- AuthGate in a layout, PermissionGate around each
  * admin page -- and a denied visit is a router.replace() rather than a
  * different route rendering, so that is what these assert.
+ *
+ * There is no longer a "session restoring" case to cover: the server resolves
+ * the session from the request cookies before any component renders, so these
+ * gates never see an unknown user. middleware.js is the first line of defence
+ * for protected routes; these components are the in-render backstop.
  */
 
 function Guarded() {
@@ -52,19 +57,6 @@ describe('AuthGate', () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
-  it('renders nothing while the session is still being restored', () => {
-    // Neither the guarded page nor a premature redirect: the gate waits for
-    // bootstrapSession() to settle first.
-    const { router } = renderWithProviders(
-      <AuthGate>
-        <Guarded />
-      </AuthGate>,
-      { isLoading: true, pathname: '/checkout' }
-    );
-
-    expect(screen.queryByRole('heading', { name: /checkout page/i })).not.toBeInTheDocument();
-    expect(router.replace).not.toHaveBeenCalled();
-  });
 });
 
 describe('PermissionGate', () => {

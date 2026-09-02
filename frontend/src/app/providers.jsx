@@ -1,22 +1,21 @@
 'use client';
 
-import { Provider } from 'react-redux';
-import { store } from '../store/store.js';
-import { AuthProvider } from '../contexts/AuthContext.jsx';
+import { SessionProvider } from '../contexts/AuthContext.jsx';
 import { ToastProvider } from '../components/ui/index.js';
 
 /**
- * Everything main.jsx used to wrap around <App/>. It has to be a client
- * component: the Redux store, the session bootstrap and the toast queue are
- * all stateful and browser-only.
+ * The only client-side providers the app needs.
+ *
+ * The Redux store that used to sit here is gone: it held exactly
+ * { user, isLoading }, which the server now resolves before rendering and
+ * passes down as `session`. Toasts stay client-side because they are a
+ * browser-only, ephemeral UI queue.
  */
-export function Providers({ children }) {
+export function Providers({ session, children }) {
   return (
-    <Provider store={store}>
-      <AuthProvider>
-        <ToastProvider>{children}</ToastProvider>
-      </AuthProvider>
-    </Provider>
+    <SessionProvider session={session}>
+      <ToastProvider>{children}</ToastProvider>
+    </SessionProvider>
   );
 }
 

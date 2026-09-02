@@ -319,6 +319,10 @@ jobs:
           PORT=4000
           API_PREFIX=/api/v1
 
+          # Read by the Next server (server components + middleware), which
+          # reaches the API by Compose service name rather than through nginx.
+          API_INTERNAL_URL=http://backend:4000/api/v1
+
           # Pinned to the commit SHA, never :latest -- what is running on the
           # instance is then always traceable to one build.
           BACKEND_IMAGE=ghcr.io/${{ github.repository_owner }}/travel-booking-backend:${{ needs.check-secrets.outputs.image_tag }}
@@ -424,6 +428,10 @@ jobs:
               image: ${FRONTEND_IMAGE}
               container_name: booking_frontend
               restart: unless-stopped
+              # The Next server resolves the session and renders server
+              # components, so it needs the API address too.
+              environment:
+                API_INTERNAL_URL: ${API_INTERNAL_URL}
               depends_on:
                 backend:
                   condition: service_healthy

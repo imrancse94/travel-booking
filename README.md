@@ -6,7 +6,7 @@ A production-oriented hotel booking and travel agency management platform: hotel
 
 **Backend** — Node.js 20 LTS, Express, plain JavaScript (ES Modules, no TypeScript), Prisma ORM against PostgreSQL, Redis, JWT auth, Zod validation, Swagger/OpenAPI docs.
 
-**Frontend** — Next.js 16 (App Router), React 19, plain JavaScript (no TypeScript), Redux Toolkit (session state), Axios.
+**Frontend** — Next.js 16 (App Router), React 19, plain JavaScript (no TypeScript), Axios. Session state is resolved on the server from an httpOnly cookie and passed into a React context — there is no client-side store.
 
 **Infrastructure** — Docker (multi-stage builds), Docker Compose for local development and production, GitHub Actions for CI/CD, images on GHCR, deployed to a single AWS EC2 instance behind nginx, which reverse-proxies `/api/*` to the backend and everything else to the Next.js server. Port 80 is the only published port.
 
@@ -46,7 +46,8 @@ See [`documentation/architecture.md`](documentation/architecture.md) for the ful
 │   │   ├── app/            # App Router route tree (layouts + page.jsx)
 │   │   ├── views/          # page components the routes render
 │   │   ├── services/       # API call modules (one per resource)
-│   │   ├── store/          # Redux Toolkit store + auth slice
+│   │   ├── lib/session.js  # server-side session (reads the auth cookie)
+│   │   ├── middleware.js   # route gating + token refresh at the edge
 │   │   ├── contexts/       # AuthProvider + useAuth()
 │   │   ├── hooks/          # useResourceList, usePermission, usePagination, useDebounce
 │   │   ├── constants/      # nav config, select options

@@ -1,51 +1,79 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { bootstrapSession, loginThunk, logoutThunk } from '../store/authSlice.js';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import * as authService from '../services/authService.js';
 
-// Session state lives in Redux (store/authSlice.js). This file only bootstraps
-// the session once on mount and exposes the same `useAuth()` shape the rest
-// of the app already depends on, so nothing consuming it needed to change.
-export function AuthProvider({ children }) {
-  const dispatch = useDispatch();
+/**
+ * Client-side view of the session that the SERVER resolved.
+ *
+ * This used to be a Redux store hydrated by a bootstrapSession() round trip on
+ * mount, which meant every page began life not knowing who the user was. The
+ * session now arrives as a prop from the root layout, so `user` is correct on
+ * the very first render and `isLoading` only ever describes an in-flight
+ * sign-in or sign-out.
+ *
+ * After either, router.refresh() re-runs the server components against the new
+ * cookies -- that is what keeps the server's idea of the session and this one
+ * from drifting apart.
+ */
+const SessionContext = createContext(null);
 
-  useEffect(() => {
-    dispatch(bootstrapSession());
-  }, [dispatch]);
-
-  return children;
-}
-
-export function useAuth() {
-  const dispatch = useDispatch();
-  const { user, isLoading } = useSelector((state) => state.auth);
+export function SessionProvider({ session = null, children }) {
+  const [user, setUser] = useState(session);
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const login = useCallback(
     async (email, password) => {
-      const action = await dispatch(loginThunk({ email, password }));
-      if (loginThunk.rejected.match(action)) {
-        throw action.error;
+      setIsLoading(true);
+      try {
+        const nextUser = await authService.login(email, password);
+        setUser(nextUser);
+        router.refresh();
+        return nextUser;
+      } finally {
+        setIsLoading(false);
       }
-      return action.payload;
     },
-    [dispatch]
+    [router]
   );
 
   const logout = useCallback(async () => {
-    await dispatch(logoutThunk());
-  }, [dispatch]);
+    setIsLoading(true);
+    try {
+      await authService.logout();
+    } finally {
+      setUser(null);
+      setIsLoading(false);
+      router.refresh();
+    }
+  }, [router]);
 
-  const hasPermission = useCallback(
-    (permission) => {
-      if (!user) return false;
-      if (user.roles?.includes('Super Admin')) return true;
-      return user.permissions?.includes(permission);
-    },
-    [user]
+  const value = useMemo(
+    () => ({
+      user,
+      isLoading,
+      isAuthenticated: Boolean(user),
+      login,
+      logout,
+      hasPermission: (permission) => {
+        if (!user) return false;
+        if (user.roles?.includes('Super Admin')) return true;
+        return Boolean(user.permissions?.includes(permission));
+      },
+      hasRole: (role) => Boolean(user?.roles?.includes(role)),
+    }),
+    [user, isLoading, login, logout]
   );
 
-  const hasRole = useCallback((role) => Boolean(user?.roles?.includes(role)), [user]);
-
-  return { user, isLoading, isAuthenticated: Boolean(user), login, logout, hasPermission, hasRole };
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
+
+export function useAuth() {
+  const ctx = useContext(SessionContext);
+  if (!ctx) throw new Error('useAuth must be used within a SessionProvider');
+  return ctx;
+}
+
+export default SessionProvider;

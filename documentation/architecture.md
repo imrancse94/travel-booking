@@ -39,7 +39,9 @@ Browser (admin / customer)
 **Frontend**
 - React 18, plain JavaScript (no TypeScript)
 - Next.js 16 (App Router) for routing, dev server and production build
-- File-based routing under `src/app`; pages are client components (the access token is in memory, so the server cannot know the session)
+- File-based routing under `src/app`. The root layout is a **server component**: it reads the access token from an httpOnly cookie, resolves the session against `GET /auth/me`, and passes it into a small client `SessionProvider`. So the first paint already knows who is signed in — no bootstrap request and no signed-out flash
+- `middleware.js` gates protected routes before any page JS is sent, and owns token refresh: the access cookie expires with its 15-minute JWT, and only middleware (not a server component) can write the replacement cookie. The refreshed token is applied to the *request* as well as the response, so the render that triggered the refresh already sees the session
+- **No client-side store.** Session state was a Redux slice holding `{ user, isLoading }`; the server now resolves it per request. Interactive leaves (forms, wizards, pickers) stay client components, which is what they should be
 - Axios (wrapped by `ApiClient`) for HTTP calls
 - Vitest + Testing Library for tests
 

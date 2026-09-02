@@ -138,6 +138,10 @@ services:
       # either. `next dev` evaluates the config at startup, so unlike the
       # production image this really is a runtime value.
       BACKEND_ORIGIN: http://backend:4000
+      # Server components and middleware call the API directly by service name.
+      # The browser cannot resolve that, which is why this is separate from the
+      # relative /api/v1 the client uses.
+      API_INTERNAL_URL: http://backend:4000/api/v1
     ports:
       - '5173:5173'
     volumes:
