@@ -17,6 +17,13 @@ async function login(email, password) {
 // guards this with a Postgres advisory lock taken in a stable sort order
 // before re-checking overlap inside the transaction (see
 // src/services/bookingService.js).
+// Each test here seeds a hotel and races N real HTTP requests against
+// Postgres, so it is far slower than a unit test. Jest's 5s default was
+// enough locally but not on a CI runner, where these timed out instead of
+// failing an assertion. The advisory-lock contention they exercise is
+// inherently slow, so the budget is explicit rather than implied.
+const CONCURRENCY_TEST_TIMEOUT_MS = 30_000;
+
 describe('concurrent booking / double-booking prevention', () => {
   afterAll(async () => {
     await prisma.$disconnect();
@@ -60,7 +67,7 @@ describe('concurrent booking / double-booking prevention', () => {
       where: { roomId: room.id, checkIn: new Date('2028-01-05'), checkOut: new Date('2028-01-08') },
     });
     expect(bookingRoomsForRoom).toHaveLength(1);
-  });
+  }, CONCURRENCY_TEST_TIMEOUT_MS);
 
   it('exactly `roomCount` of N simultaneous type-based requests succeed, one physical room each', async () => {
     const ROOM_COUNT = 3;
@@ -92,7 +99,7 @@ describe('concurrent booking / double-booking prevention', () => {
     // Every winner must have been assigned a distinct physical room.
     const assignedRoomIds = new Set(succeeded.map((r) => r.body.data.bookingRooms[0].roomId));
     expect(assignedRoomIds.size).toBe(ROOM_COUNT);
-  });
+  }, CONCURRENCY_TEST_TIMEOUT_MS);
 
   it('a cancelled booking releases the room for the same dates', async () => {
     const { hotel, rooms } = await createBookableHotel({ roomCount: 1, price: 50 });
@@ -140,5 +147,5 @@ describe('concurrent booking / double-booking prevention', () => {
         guests: [sampleGuest()],
       });
     expect(afterCancel.status).toBe(201);
-  });
+  }, CONCURRENCY_TEST_TIMEOUT_MS);
 });
