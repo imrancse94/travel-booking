@@ -18,6 +18,7 @@ export const ADMIN_NAV_ITEMS = [
   { label: 'Reports', to: '/admin/reports', icon: '\u{1F4CA}', permission: 'reports.view' },
   { label: 'Users', to: '/admin/users', icon: '\u{1F9D1}‍\u{1F4BC}', permission: 'users.view' },
   { label: 'Roles & Permissions', to: '/admin/roles', icon: '\u{1F510}', permission: 'roles.view' },
+  { label: 'Activity Logs', to: '/admin/activity-logs', icon: '\u{1F4DC}', permission: 'activity_logs.view' },
   { label: 'Settings', to: '/admin/settings', icon: '⚙️', permission: null },
 ];
 
@@ -43,6 +44,7 @@ const SECTION_LABELS = {
   users: 'Users',
   roles: 'Roles & Permissions',
   settings: 'Settings',
+  'activity-logs': 'Activity Logs',
   new: 'New',
   edit: 'Edit',
 };

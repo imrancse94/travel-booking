@@ -34,6 +34,9 @@ export const PERMISSIONS = [
   'reports.view', 'reports.export',
   'dashboard.view',
   'audit_logs.view',
+  // Activity logs carry IPs, user agents and request bodies, so they sit with
+  // audit_logs: Super Admin only by default (see ROLE_PERMISSIONS below).
+  'activity_logs.view',
   // notifications / settings
   'notifications.view', 'notifications.manage',
   'settings.view', 'settings.update',
@@ -52,7 +55,7 @@ export const ROLES = {
 
 // Super Admin implicitly bypasses all permission checks (see middleware/rbac.js) and is not listed here.
 export const ROLE_PERMISSIONS = {
-  [ROLES.AGENCY_ADMIN]: PERMISSIONS.filter((p) => !p.startsWith('audit_logs')),
+  [ROLES.AGENCY_ADMIN]: PERMISSIONS.filter((p) => !p.startsWith('audit_logs') && !p.startsWith('activity_logs')),
   [ROLES.HOTEL_ADMIN]: [
     'hotels.view', 'hotels.update',
     'rooms.view', 'rooms.create', 'rooms.update', 'rooms.delete',

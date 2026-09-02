@@ -24,6 +24,7 @@ import { router as reportRoutes } from './reports.routes.js';
 import { router as dashboardRoutes } from './dashboard.routes.js';
 import { router as notificationRoutes } from './notifications.routes.js';
 import { router as settingRoutes } from './settings.routes.js';
+import { router as activityLogRoutes } from './activityLogs.routes.js';
 import { router as uploadRoutes } from './uploads.routes.js';
 
 export const router = Router();
@@ -52,6 +53,7 @@ router.use('/reports', reportRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/settings', settingRoutes);
+router.use('/activity-logs', activityLogRoutes);
 router.use('/uploads', uploadRoutes);
 
 export default router;

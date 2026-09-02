@@ -9,6 +9,7 @@ import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { swaggerSpec } from './config/swagger.js';
 import { requestLogger } from './middleware/requestLogger.js';
+import { activityTracker } from './middleware/activityLogger.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { router as apiRouter } from './routes/index.js';
@@ -32,6 +33,9 @@ export function createApp() {
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
   app.use(cookieParser());
   app.use(requestLogger);
+  // Mounted before the routes but records on 'finish', so req.user (set by the
+  // per-route authenticate middleware) is already populated by the time it runs.
+  app.use(activityTracker);
   app.use(generalLimiter);
 
   if (!env.isProduction) {
