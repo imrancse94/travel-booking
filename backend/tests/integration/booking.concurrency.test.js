@@ -24,6 +24,23 @@ async function login(email, password) {
 // inherently slow, so the budget is explicit rather than implied.
 const CONCURRENCY_TEST_TIMEOUT_MS = 30_000;
 
+/**
+ * Counts responses by status and pulls out anything unexpected with its
+ * message. Asserting on this instead of on a filtered array means a failure
+ * reports WHY -- `{ '429': 10 }` is rate limiting, `{ '409': 10 }` is the
+ * guard rejecting everyone, and `unexpected` carries the API's own error text.
+ */
+function summarise(responses, allowed = [201, 409]) {
+  const byStatus = {};
+  for (const r of responses) {
+    byStatus[r.status] = (byStatus[r.status] || 0) + 1;
+  }
+  const unexpected = responses
+    .filter((r) => !allowed.includes(r.status))
+    .map((r) => ({ status: r.status, message: r.body?.message }));
+  return { byStatus, unexpected };
+}
+
 describe('concurrent booking / double-booking prevention', () => {
   afterAll(async () => {
     await prisma.$disconnect();
@@ -57,11 +74,9 @@ describe('concurrent booking / double-booking prevention', () => {
       )
     );
 
-    const succeeded = responses.filter((r) => r.status === 201);
-    const conflicted = responses.filter((r) => r.status === 409);
-
-    expect(succeeded).toHaveLength(1);
-    expect(conflicted).toHaveLength(N - 1);
+    const { byStatus, unexpected } = summarise(responses);
+    expect(unexpected).toEqual([]);
+    expect(byStatus).toEqual({ 201: 1, 409: N - 1 });
 
     const bookingRoomsForRoom = await prisma.bookingRoom.findMany({
       where: { roomId: room.id, checkIn: new Date('2028-01-05'), checkOut: new Date('2028-01-08') },
@@ -94,7 +109,9 @@ describe('concurrent booking / double-booking prevention', () => {
     );
 
     const succeeded = responses.filter((r) => r.status === 201);
-    expect(succeeded).toHaveLength(ROOM_COUNT);
+    const { byStatus, unexpected } = summarise(responses);
+    expect(unexpected).toEqual([]);
+    expect(byStatus).toEqual({ 201: ROOM_COUNT, 409: N - ROOM_COUNT });
 
     // Every winner must have been assigned a distinct physical room.
     const assignedRoomIds = new Set(succeeded.map((r) => r.body.data.bookingRooms[0].roomId));
