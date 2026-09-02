@@ -26,7 +26,10 @@ export function errorHandler(err, req, res, next) {
       message = 'This action violates a related record constraint';
     } else {
       statusCode = 400;
-      message = 'Database request error';
+      // The bare message hid the cause: a connection-pool timeout (P2024) and a
+      // constraint violation both read as "Database request error". The code is
+      // withheld in production but is what makes a CI failure diagnosable.
+      message = env.isProduction ? 'Database request error' : `Database request error (${err.code})`;
     }
   }
 

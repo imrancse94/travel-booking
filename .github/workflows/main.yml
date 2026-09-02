@@ -95,7 +95,13 @@ jobs:
 
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://booking_user:booking_password@localhost:5432/booking_test?schema=public
+      # connection_limit is explicit because the booking guard holds a
+      # pg_advisory_xact_lock for the life of its transaction, so N concurrent
+      # bookings need N connections. Prisma otherwise sizes the pool from the
+      # CPU count ((cores*2)+1), which is ~21 on a dev machine but 9 on a
+      # 4-core runner -- below the 10 simultaneous requests the concurrency
+      # suite fires, so every one of them failed with a pool timeout.
+      DATABASE_URL: postgresql://booking_user:booking_password@localhost:5432/booking_test?schema=public&connection_limit=25
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-test-secret
       JWT_REFRESH_SECRET: ci-test-refresh-secret
