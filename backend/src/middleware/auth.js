@@ -1,6 +1,6 @@
 import { jwtService } from '../lib/JwtService.js';
 import { env } from '../config/env.js';
-import { prisma } from '../config/prisma.js';
+import * as userRepository from '../repositories/userRepository.js';
 import { AuthenticationError } from '../utils/errors.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -13,6 +13,14 @@ function extractToken(req) {
     return req.cookies.accessToken;
   }
   return null;
+}
+
+/** Flattens the nested userRoles -> role -> rolePermissions -> permission rows. */
+function grantsOf(user) {
+  return {
+    roles: user.userRoles.map((ur) => ur.role.name),
+    permissions: new Set(user.userRoles.flatMap((ur) => ur.role.rolePermissions.map((rp) => rp.permission.name))),
+  };
 }
 
 export const authenticate = asyncHandler(async (req, res, next) => {
@@ -30,19 +38,13 @@ export const authenticate = asyncHandler(async (req, res, next) => {
     );
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.sub },
-    include: { userRoles: { include: { role: { include: { rolePermissions: { include: { permission: true } } } } } } },
-  });
+  const user = await userRepository.findByIdWithPermissions(payload.sub);
 
-  if (!user || user.deletedAt || user.status !== 'active') {
+  if (!user || user.status !== 'active') {
     throw new AuthenticationError('Account is no longer active');
   }
 
-  const roles = user.userRoles.map((ur) => ur.role.name);
-  const permissions = new Set(
-    user.userRoles.flatMap((ur) => ur.role.rolePermissions.map((rp) => rp.permission.name))
-  );
+  const { roles, permissions } = grantsOf(user);
 
   req.user = {
     id: user.id,
@@ -64,17 +66,9 @@ export const optionalAuthenticate = asyncHandler(async (req, res, next) => {
 
   try {
     const payload = jwtService.verify(token, env.jwt.secret);
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
-      include: { userRoles: { include: { role: { include: { rolePermissions: { include: { permission: true } } } } } } },
-    });
-    if (user && !user.deletedAt && user.status === 'active') {
-      req.user = {
-        id: user.id,
-        email: user.email,
-        roles: user.userRoles.map((ur) => ur.role.name),
-        permissions: new Set(user.userRoles.flatMap((ur) => ur.role.rolePermissions.map((rp) => rp.permission.name))),
-      };
+    const user = await userRepository.findByIdWithPermissions(payload.sub);
+    if (user && user.status === 'active') {
+      req.user = { id: user.id, email: user.email, ...grantsOf(user) };
     }
   } catch {
     // ignore invalid token in optional auth

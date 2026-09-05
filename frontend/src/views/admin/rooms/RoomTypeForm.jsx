@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Button, Card, Input, Loader, SectionTabs, Select, Textarea, useToast } from '../../../components/ui/index.js';
+import { ArrowLeftIcon, Button, Card, Input, Loader, SectionTabs, Select, Textarea, useToast } from '../../../components/ui/index.js';
 import * as roomTypeService from '../../../services/roomTypeService.js';
 import * as hotelService from '../../../services/hotelService.js';
 import * as amenityService from '../../../services/amenityService.js';
@@ -38,8 +38,14 @@ export function RoomTypeForm() {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    hotelService.list({ limit: 100 }).then((res) => setHotels(res.data || []));
-    amenityService.list({ limit: 100 }).then((res) => setAmenities(res.data || []));
+    hotelService
+      .list({ limit: 100 })
+      .then((res) => setHotels(res.data || []))
+      .catch(() => setHotels([]));
+    amenityService
+      .list({ limit: 100 })
+      .then((res) => setAmenities(res.data || []))
+      .catch(() => setAmenities([]));
   }, []);
 
   useEffect(() => {
@@ -118,6 +124,11 @@ export function RoomTypeForm() {
 
       <div className="page-header">
         <h1 className="page-title">{isEdit ? 'Edit Room Type' : 'New Room Type'}</h1>
+        <div className="page-actions">
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/rooms/room-types')}>
+            Back
+          </Button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>

@@ -8,6 +8,13 @@ export const getSettings = asyncHandler(async (req, res) => {
   return success(res, { data: settings });
 });
 
+// GET /settings/public -- unauthenticated. The branding the sign-in page and
+// the public site need before anyone has a session.
+export const getPublicSettings = asyncHandler(async (req, res) => {
+  const settings = await settingsService.getPublicSettings();
+  return success(res, { data: settings });
+});
+
 // PUT /settings -- body is either { key, value } for a single setting, or
 // { updates: [{ key, value }, ...] } to update several at once.
 export const updateSettings = asyncHandler(async (req, res) => {

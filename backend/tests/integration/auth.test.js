@@ -2,7 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import { randomUUID } from 'node:crypto';
 import { createApp } from '../../src/app.js';
-import { prisma } from '../../src/config/prisma.js';
+import { eq } from 'drizzle-orm';
+import { db, disconnectDb } from '../../src/db/index.js';
+import { customers, userRoles } from '../../src/db/schema.js';
 import { ensureRolesAndPermissions } from '../helpers/fixtures.js';
 
 const app = createApp();
@@ -13,7 +15,7 @@ describe('auth', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectDb();
   });
 
   it('registers a new customer account and auto-creates a Customer profile', async () => {
@@ -27,12 +29,12 @@ describe('auth', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.passwordHash).toBeUndefined();
 
-    const customer = await prisma.customer.findUnique({ where: { email } });
-    expect(customer).not.toBeNull();
+    const [customer] = await db.select().from(customers).where(eq(customers.email, email)).limit(1);
+    expect(customer).toBeDefined();
 
-    const roles = await prisma.userRole.findMany({
-      where: { userId: res.body.data.id },
-      include: { role: true },
+    const roles = await db.query.userRoles.findMany({
+      where: eq(userRoles.userId, res.body.data.id),
+      with: { role: true },
     });
     expect(roles.map((r) => r.role.name)).toContain('Customer');
   });

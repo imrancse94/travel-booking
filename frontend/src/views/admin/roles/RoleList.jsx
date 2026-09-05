@@ -7,11 +7,14 @@ import {
   Input,
   Loader,
   Modal,
+  PlusCircleIcon,
+  SearchFilterBar,
   Textarea,
   useToast,
 } from '../../../components/ui/index.js';
 import { usePermission } from '../../../hooks/usePermission.js';
 import * as roleService from '../../../services/roleService.js';
+import { PermissionAccordion } from './PermissionAccordion.jsx';
 
 const EMPTY_CREATE_FORM = { name: '', description: '' };
 
@@ -29,8 +32,9 @@ function groupByModule(permissions) {
 
 /**
  * Roles & Permissions: a role list on the left, and a permission editor
- * (checkboxes grouped by module) for the selected role on the right.
- * Also supports creating a new role with an initial permission set.
+ * (checkboxes grouped by module) for the selected role on the right. A new
+ * role is created with no permissions -- they're granted afterward from the
+ * same editor, rather than a second copy of it inside the creation modal.
  */
 export function RoleList() {
   const { show } = useToast();
@@ -38,6 +42,7 @@ export function RoleList() {
   const canUpdate = usePermission('roles.update');
 
   const [roles, setRoles] = useState([]);
+  const [roleSearch, setRoleSearch] = useState('');
   const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedRoleId, setSelectedRoleId] = useState(null);
@@ -46,7 +51,6 @@ export function RoleList() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
-  const [createPermissionIds, setCreatePermissionIds] = useState([]);
   const [creating, setCreating] = useState(false);
 
   function load() {
@@ -76,6 +80,10 @@ export function RoleList() {
 
   const selectedRole = roles.find((r) => r.id === selectedRoleId) || null;
   const groupedPermissions = useMemo(() => groupByModule(permissions), [permissions]);
+  const visibleRoles = useMemo(() => {
+    const term = roleSearch.trim().toLowerCase();
+    return term ? roles.filter((r) => r.name.toLowerCase().includes(term)) : roles;
+  }, [roles, roleSearch]);
 
   function selectRole(role) {
     setSelectedRoleId(role.id);
@@ -111,14 +119,7 @@ export function RoleList() {
 
   function openCreate() {
     setCreateForm(EMPTY_CREATE_FORM);
-    setCreatePermissionIds([]);
     setCreateOpen(true);
-  }
-
-  function toggleCreatePermission(permissionId) {
-    setCreatePermissionIds((prev) =>
-      prev.includes(permissionId) ? prev.filter((id) => id !== permissionId) : [...prev, permissionId]
-    );
   }
 
   async function handleCreateRole(e) {
@@ -126,7 +127,9 @@ export function RoleList() {
     if (!createForm.name.trim()) return;
     setCreating(true);
     try {
-      const res = await roleService.createRole({ ...createForm, permissionIds: createPermissionIds });
+      // Created with no permissions -- granted afterward from the editor on
+      // the right, the same place every other role's permissions are managed.
+      const res = await roleService.createRole({ ...createForm, permissionIds: [] });
       show('Role created', 'success');
       setCreateOpen(false);
       const reloadedRoles = await load();
@@ -148,13 +151,14 @@ export function RoleList() {
           <h1 className="page-title">Roles &amp; Permissions</h1>
           <p className="page-subtitle">Manage staff roles and the granular permissions each one grants.</p>
         </div>
-        <div className="page-actions">{canCreate && <Button onClick={openCreate}>+ New Role</Button>}</div>
+        <div className="page-actions">{canCreate && <Button variant="success" onClick={openCreate} icon={<PlusCircleIcon />}>New Role</Button>}</div>
       </div>
 
       <div className="role-manager">
         <Card title="Roles" className="role-manager__list">
+          <SearchFilterBar search={roleSearch} onSearchChange={setRoleSearch} searchPlaceholder="Search roles..." />
           <div className="role-manager__roles">
-            {roles.map((role) => (
+            {visibleRoles.map((role) => (
               <button
                 key={role.id}
                 type="button"
@@ -166,6 +170,9 @@ export function RoleList() {
               </button>
             ))}
             {roles.length === 0 && <p className="text-muted">No roles defined yet.</p>}
+            {roles.length > 0 && visibleRoles.length === 0 && (
+              <p className="text-muted">No roles match &quot;{roleSearch}&quot;.</p>
+            )}
           </div>
         </Card>
 
@@ -184,40 +191,14 @@ export function RoleList() {
           {!selectedRole ? (
             <p className="text-muted">Select a role to view and edit its permissions.</p>
           ) : (
-            <div className="role-manager__modules">
-              {groupedPermissions.map(({ module, permissions: modulePermissions }) => {
-                const allSelected = modulePermissions.every((p) => selectedPermissionIds.includes(p.id));
-                return (
-                  <div key={module} className="role-manager__module">
-                    <div className="role-manager__module-header">
-                      <h4>{module}</h4>
-                      {canUpdate && (
-                        <button
-                          type="button"
-                          className="role-manager__toggle-all"
-                          onClick={() => toggleModule(modulePermissions, allSelected)}
-                        >
-                          {allSelected ? 'Clear all' : 'Select all'}
-                        </button>
-                      )}
-                    </div>
-                    <div className="role-manager__module-grid">
-                      {modulePermissions.map((perm) => (
-                        <label key={perm.id} className="role-manager__perm">
-                          <input
-                            type="checkbox"
-                            disabled={!canUpdate}
-                            checked={selectedPermissionIds.includes(perm.id)}
-                            onChange={() => togglePermission(perm.id)}
-                          />
-                          {perm.name}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <PermissionAccordion
+              key={selectedRole.id}
+              groups={groupedPermissions}
+              selectedIds={selectedPermissionIds}
+              onToggle={togglePermission}
+              onToggleModule={canUpdate ? toggleModule : undefined}
+              disabled={!canUpdate}
+            />
           )}
         </Card>
       </div>
@@ -232,7 +213,7 @@ export function RoleList() {
             <Button variant="secondary" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateRole} loading={creating}>
+            <Button variant="success" onClick={handleCreateRole} loading={creating}>
               Create Role
             </Button>
           </>
@@ -252,31 +233,6 @@ export function RoleList() {
             value={createForm.description}
             onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
           />
-
-          <div className="form-section">
-            <h3 className="form-section__title">Initial Permissions</h3>
-            <div className="role-manager__modules">
-              {groupedPermissions.map(({ module, permissions: modulePermissions }) => (
-                <div key={module} className="role-manager__module">
-                  <div className="role-manager__module-header">
-                    <h4>{module}</h4>
-                  </div>
-                  <div className="role-manager__module-grid">
-                    {modulePermissions.map((perm) => (
-                      <label key={perm.id} className="role-manager__perm">
-                        <input
-                          type="checkbox"
-                          checked={createPermissionIds.includes(perm.id)}
-                          onChange={() => toggleCreatePermission(perm.id)}
-                        />
-                        {perm.name}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </form>
       </Modal>
     </div>

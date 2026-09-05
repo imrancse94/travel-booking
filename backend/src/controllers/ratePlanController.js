@@ -29,19 +29,31 @@ export const remove = asyncHandler(async (req, res) => {
   return success(res, { message: 'Rate plan deleted' });
 });
 
-// -- Individual room rates --
+// -- Room rates, un-nested (/rate-plans/room-rates) --
+
+export const listRoomRates = asyncHandler(async (req, res) => {
+  const { page, limit, skip } = parsePagination(req.query);
+  const { items, total } = await ratePlanService.listRoomRates({ ...req.query, page, limit, skip });
+  return paginated(res, { items, page, limit, total });
+});
+
+export const createRoomRate = asyncHandler(async (req, res) => {
+  const { roomTypeId, ...data } = req.body;
+  const rate = await ratePlanService.createRoomRate(roomTypeId, data, req.user.id);
+  return created(res, rate, 'Room rate created');
+});
 
 export const getRoomRate = asyncHandler(async (req, res) => {
-  const rate = await ratePlanService.getRoomRate(req.params.rateId);
+  const rate = await ratePlanService.getRoomRate(req.params.id);
   return success(res, { data: rate });
 });
 
 export const updateRoomRate = asyncHandler(async (req, res) => {
-  const rate = await ratePlanService.updateRoomRate(req.params.rateId, req.body, req.user.id);
+  const rate = await ratePlanService.updateRoomRate(req.params.id, req.body, req.user.id);
   return success(res, { data: rate, message: 'Room rate updated' });
 });
 
 export const deleteRoomRate = asyncHandler(async (req, res) => {
-  await ratePlanService.deleteRoomRate(req.params.rateId, req.user.id);
+  await ratePlanService.deleteRoomRate(req.params.id, req.user.id);
   return success(res, { message: 'Room rate deleted' });
 });

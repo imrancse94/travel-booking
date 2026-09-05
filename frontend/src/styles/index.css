@@ -10,6 +10,7 @@
      the mid blue alone reads flat. */
   --color-primary-deep: #12275c;
   --color-success: #16a34a;
+  --color-success-hover: #15803d;
   --color-warning: #d97706;
   --color-danger: #dc2626;
   --color-text: #111827;
@@ -122,6 +123,14 @@ textarea {
   font-size: 1.4rem;
   font-weight: 700;
   color: var(--color-text);
+}
+
+/* A detail page's title plus its record's status badge, side by side. */
+.page-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .page-subtitle {

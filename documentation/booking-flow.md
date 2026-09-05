@@ -77,7 +77,7 @@ Available any time before the booking reaches `cancelled`/`checked_out`/`complet
 
 **Mechanism**, in `createBooking` (`bookingService.js`):
 
-1. The entire booking creation runs inside **one Prisma transaction** (`prisma.$transaction(async (tx) => { ... })`). Nothing about the booking is visible to any other connection until this transaction commits, and any failure at any step rolls back everything — no room is ever left half-reserved.
+1. The entire booking creation runs inside **one database transaction** (`db.transaction(async (tx) => { ... })`). Nothing about the booking is visible to any other connection until this transaction commits, and any failure at any step rolls back everything — no room is ever left half-reserved.
 2. Before touching availability data, the transaction takes a **PostgreSQL advisory transaction lock per room (and, for a type-based selection, per room type) being booked**:
    ```js
    async function lockRoomsAndTypes(tx, { roomIds, roomTypeIds }) {

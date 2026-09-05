@@ -9,12 +9,15 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EditIcon,
   Pagination,
+  PlusCircleIcon,
   SearchFilterBar,
   SectionTabs,
   Select,
   StatusBadge,
   Table,
+  TrashIcon,
   useToast,
 } from '../../../components/ui/index.js';
 import * as tourService from '../../../services/tourService.js';
@@ -57,16 +60,16 @@ export function TourPackageList() {
     { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
     {
       key: 'actions',
-      header: '',
+      header: 'Action',
       render: (row) => (
         <div className="inline-actions">
           {canUpdate && (
-            <Button variant="ghost" onClick={() => router.push(`/admin/tours/packages/${row.id}/edit`)}>
+            <Button icon={<EditIcon />} variant="primary" onClick={() => router.push(`/admin/tours/packages/${row.id}/edit`)}>
               Edit
             </Button>
           )}
           {canDelete && (
-            <Button variant="ghost" onClick={() => setPendingDelete(row)}>
+            <Button icon={<TrashIcon />} variant="danger" onClick={() => setPendingDelete(row)}>
               Delete
             </Button>
           )}
@@ -101,8 +104,8 @@ export function TourPackageList() {
         </div>
         <div className="page-actions">
           {canCreate && (
-            <Button as={Link} href="/admin/tours/packages/new">
-              + New Package
+            <Button variant="success" as={Link} href="/admin/tours/packages/new" icon={<PlusCircleIcon />}>
+              New Package
             </Button>
           )}
         </div>

@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Button, Card, Input, Loader, SectionTabs, Select, useToast } from '../../../components/ui/index.js';
+import { ArrowLeftIcon, Button, Card, Input, Loader, SectionTabs, Select, useToast } from '../../../components/ui/index.js';
 import * as roomService from '../../../services/roomService.js';
 import * as roomTypeService from '../../../services/roomTypeService.js';
 import { ROOM_STATUS_OPTIONS } from '../../../constants/options.js';
 import { ROOM_SECTION_TABS } from './roomsNav.js';
 import { apiFieldErrors, toastFromApiError, toastFromFieldErrors } from '../../../utils/formErrors.js';
+import { MAX_PAGE_SIZE } from '../../../constants/pagination.js';
 
 const EMPTY_FORM = { roomTypeId: '', roomNumber: '', floor: '', status: 'available' };
 
@@ -25,7 +26,10 @@ export function RoomForm() {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    roomTypeService.list({ limit: 200 }).then((res) => setRoomTypes(res.data || []));
+    roomTypeService
+      .list({ limit: MAX_PAGE_SIZE })
+      .then((res) => setRoomTypes(res.data || []))
+      .catch(() => setRoomTypes([]));
   }, []);
 
   useEffect(() => {
@@ -84,6 +88,11 @@ export function RoomForm() {
 
       <div className="page-header">
         <h1 className="page-title">{isEdit ? 'Edit Room' : 'New Room'}</h1>
+        <div className="page-actions">
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/rooms/rooms')}>
+            Back
+          </Button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>

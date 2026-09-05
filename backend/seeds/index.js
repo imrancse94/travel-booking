@@ -1,38 +1,82 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { and, eq, inArray } from 'drizzle-orm';
+import { db, disconnectDb } from '../src/db/index.js';
+import {
+  agencies,
+  amenities as amenitiesTable,
+  destinations,
+  hotelAmenities,
+  hotels,
+  permissions,
+  ratePlans as ratePlansTable,
+  rolePermissions,
+  roles,
+  roomRates,
+  roomTypes,
+  rooms,
+  services as servicesTable,
+  tourItineraries,
+  tourPackages,
+  userRoles,
+  users,
+} from '../src/db/schema.js';
+import * as userRepository from '../src/repositories/userRepository.js';
 import { BcryptHasher } from '../src/lib/BcryptHasher.js';
 import { PERMISSIONS, ROLES, ROLE_PERMISSIONS } from '../src/config/permissions.js';
 
-const prisma = new PrismaClient();
 const bcryptHasher = new BcryptHasher();
+
+/**
+ * Prisma's `upsert` with an empty `update` -- insert if missing, otherwise
+ * leave the existing row alone -- and its `findFirst`-then-`create` pattern,
+ * both of which the seed leans on so it can be re-run safely.
+ */
+async function findOrCreate(table, where, data) {
+  const [existing] = await db.select().from(table).where(where).limit(1);
+  if (existing) return { row: existing, created: false };
+
+  const [inserted] = await db.insert(table).values(data).onConflictDoNothing().returning();
+  if (inserted) return { row: inserted, created: true };
+
+  // Lost a race against a concurrent seed; read back whatever won.
+  const [row] = await db.select().from(table).where(where).limit(1);
+  return { row, created: false };
+}
 
 async function seedPermissionsAndRoles() {
   console.log('Seeding permissions...');
   for (const name of PERMISSIONS) {
     const [module] = name.split('.');
-    await prisma.permission.upsert({ where: { name }, update: {}, create: { name, module } });
+    // eslint-disable-next-line no-await-in-loop -- a short, fixed list
+    await findOrCreate(permissions, eq(permissions.name, name), { name, module });
   }
 
   console.log('Seeding roles...');
-  const superAdmin = await prisma.role.upsert({
-    where: { name: ROLES.SUPER_ADMIN },
-    update: {},
-    create: { name: ROLES.SUPER_ADMIN, description: 'Full system access', isSystem: true },
+  const { row: superAdmin } = await findOrCreate(roles, eq(roles.name, ROLES.SUPER_ADMIN), {
+    name: ROLES.SUPER_ADMIN,
+    description: 'Full system access',
+    isSystem: true,
   });
 
   for (const [roleName, permissionNames] of Object.entries(ROLE_PERMISSIONS)) {
-    const role = await prisma.role.upsert({
-      where: { name: roleName },
-      update: {},
-      create: { name: roleName, description: roleName, isSystem: true },
+    // eslint-disable-next-line no-await-in-loop -- a short, fixed list
+    const { row: role } = await findOrCreate(roles, eq(roles.name, roleName), {
+      name: roleName,
+      description: roleName,
+      isSystem: true,
     });
 
-    const permissions = await prisma.permission.findMany({ where: { name: { in: permissionNames } } });
-    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
-    await prisma.rolePermission.createMany({
-      data: permissions.map((p) => ({ roleId: role.id, permissionId: p.id })),
-      skipDuplicates: true,
-    });
+    // eslint-disable-next-line no-await-in-loop
+    const granted = await db.select().from(permissions).where(inArray(permissions.name, permissionNames));
+    // eslint-disable-next-line no-await-in-loop
+    await db.delete(rolePermissions).where(eq(rolePermissions.roleId, role.id));
+    if (granted.length) {
+      // eslint-disable-next-line no-await-in-loop
+      await db
+        .insert(rolePermissions)
+        .values(granted.map((p) => ({ roleId: role.id, permissionId: p.id })))
+        .onConflictDoNothing();
+    }
   }
 
   return { superAdmin };
@@ -42,39 +86,28 @@ async function seedAdminUser(superAdminRole) {
   console.log('Seeding development admin user...');
   const email = 'admin@example.com';
   const passwordHash = await bcryptHasher.hash('Admin@12345');
+  const agencyId = '00000000-0000-0000-0000-000000000001';
 
-  const agency = await prisma.agency.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000001' },
-    update: {},
-    create: {
-      id: '00000000-0000-0000-0000-000000000001',
-      name: 'Global Travel Agency',
-      email: 'contact@globaltravel.example',
-      phone: '+880-1000-000000',
-      currency: 'USD',
-      timezone: 'Asia/Dhaka',
-    },
+  const { row: agency } = await findOrCreate(agencies, eq(agencies.id, agencyId), {
+    id: agencyId,
+    name: 'Global Travel Agency',
+    email: 'contact@globaltravel.example',
+    phone: '+880-1000-000000',
+    currency: 'USD',
+    timezone: 'Asia/Dhaka',
   });
 
-  const admin = await prisma.user.upsert({
-    where: { email },
-    update: {},
-    create: {
-      agencyId: agency.id,
-      firstName: 'System',
-      lastName: 'Administrator',
-      email,
-      passwordHash,
-      isEmailVerified: true,
-      status: 'active',
-    },
+  const { row: admin } = await findOrCreate(users, eq(users.email, email), {
+    agencyId: agency.id,
+    firstName: 'System',
+    lastName: 'Administrator',
+    email,
+    passwordHash,
+    isEmailVerified: true,
+    status: 'active',
   });
 
-  await prisma.userRole.upsert({
-    where: { userId_roleId: { userId: admin.id, roleId: superAdminRole.id } },
-    update: {},
-    create: { userId: admin.id, roleId: superAdminRole.id },
-  });
+  await db.insert(userRoles).values({ userId: admin.id, roleId: superAdminRole.id }).onConflictDoNothing();
 
   return { agency, admin };
 }
@@ -83,7 +116,9 @@ async function seedAmenities() {
   const names = ['WiFi', 'Parking', 'Swimming Pool', 'Gym', 'Restaurant', 'Air Conditioning', 'Breakfast', 'Airport Transfer', 'Room Service', 'Spa'];
   const amenities = {};
   for (const name of names) {
-    amenities[name] = await prisma.amenity.upsert({ where: { name }, update: {}, create: { name } });
+    // eslint-disable-next-line no-await-in-loop -- a short, fixed list
+    const { row } = await findOrCreate(amenitiesTable, eq(amenitiesTable.name, name), { name });
+    amenities[name] = row;
   }
   return amenities;
 }
@@ -101,8 +136,8 @@ async function seedServices() {
     { name: 'Guided Tour', description: 'A half-day guided city tour.', price: '40.00', tax: '0' },
   ];
   for (const svc of services) {
-    const existing = await prisma.service.findFirst({ where: { name: svc.name } });
-    if (!existing) await prisma.service.create({ data: svc });
+    // eslint-disable-next-line no-await-in-loop -- a short, fixed list
+    await findOrCreate(servicesTable, eq(servicesTable.name, svc.name), svc);
   }
 }
 
@@ -116,8 +151,9 @@ async function seedRatePlans() {
   ];
   const created = {};
   for (const plan of plans) {
-    const existing = await prisma.ratePlan.findFirst({ where: { name: plan.name } });
-    created[plan.name] = existing || (await prisma.ratePlan.create({ data: plan }));
+    // eslint-disable-next-line no-await-in-loop -- a short, fixed list
+    const { row } = await findOrCreate(ratePlansTable, eq(ratePlansTable.name, plan.name), plan);
+    created[plan.name] = row;
   }
   return created;
 }
@@ -140,92 +176,88 @@ async function seedHotels(agency, amenities, ratePlans) {
   const startDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const endDate = new Date(Date.UTC(today.getUTCFullYear() + 2, 0, 1));
 
+  /* eslint-disable no-await-in-loop -- the seed is deliberately sequential */
   for (const hotelDef of hotelDefs) {
-    const existing = await prisma.hotel.findFirst({ where: { name: hotelDef.name } });
-    const hotel =
-      existing ||
-      (await prisma.hotel.create({
-        data: {
-          agencyId: agency.id,
-          name: hotelDef.name,
-          description: `${hotelDef.name} is a well-known property in ${hotelDef.city}.`,
-          address: `1 Main Road, ${hotelDef.city}`,
-          city: hotelDef.city,
-          country: hotelDef.country,
-          starRating: hotelDef.starRating,
-          email: `info@${hotelDef.name.toLowerCase().replace(/\s+/g, '')}.example`,
-          phone: '+880-2-000000',
-          checkInTime: '14:00',
-          checkOutTime: '12:00',
-          cancellationPolicy: 'Free cancellation up to 7 days before check-in; 50% charge inside 7 days; 100% inside 24 hours.',
-          status: 'active',
-        },
-      }));
+    const { row: hotel, created } = await findOrCreate(hotels, eq(hotels.name, hotelDef.name), {
+      agencyId: agency.id,
+      name: hotelDef.name,
+      description: `${hotelDef.name} is a well-known property in ${hotelDef.city}.`,
+      address: `1 Main Road, ${hotelDef.city}`,
+      city: hotelDef.city,
+      country: hotelDef.country,
+      starRating: hotelDef.starRating,
+      email: `info@${hotelDef.name.toLowerCase().replace(/\s+/g, '')}.example`,
+      phone: '+880-2-000000',
+      checkInTime: '14:00',
+      checkOutTime: '12:00',
+      cancellationPolicy: 'Free cancellation up to 7 days before check-in; 50% charge inside 7 days; 100% inside 24 hours.',
+      status: 'active',
+    });
 
-    if (!existing) {
-      await prisma.hotelAmenity.createMany({
-        data: Object.values(amenities)
-          .slice(0, 6)
-          .map((a) => ({ hotelId: hotel.id, amenityId: a.id })),
-        skipDuplicates: true,
-      });
+    if (created) {
+      await db
+        .insert(hotelAmenities)
+        .values(
+          Object.values(amenities)
+            .slice(0, 6)
+            .map((a) => ({ hotelId: hotel.id, amenityId: a.id }))
+        )
+        .onConflictDoNothing();
     }
 
     for (const rt of roomTypeDefs) {
-      const existingRt = await prisma.roomType.findFirst({ where: { hotelId: hotel.id, name: rt.name } });
-      const roomType =
-        existingRt ||
-        (await prisma.roomType.create({
-          data: {
-            hotelId: hotel.id,
-            name: rt.name,
-            description: `${rt.name} room with modern amenities.`,
-            maxAdults: rt.maxAdults,
-            maxChildren: rt.maxChildren,
-            bedType: 'Queen',
-            totalRooms: 5,
-          },
-        }));
+      const { row: roomType, created: roomTypeCreated } = await findOrCreate(
+        roomTypes,
+        and(eq(roomTypes.hotelId, hotel.id), eq(roomTypes.name, rt.name)),
+        {
+          hotelId: hotel.id,
+          name: rt.name,
+          description: `${rt.name} room with modern amenities.`,
+          maxAdults: rt.maxAdults,
+          maxChildren: rt.maxChildren,
+          bedType: 'Queen',
+          totalRooms: 5,
+        }
+      );
 
-      if (!existingRt) {
-        await prisma.room.createMany({
-          data: Array.from({ length: 5 }, (_, i) => ({
+      if (roomTypeCreated) {
+        await db.insert(rooms).values(
+          Array.from({ length: 5 }, (_, i) => ({
             roomTypeId: roomType.id,
             roomNumber: `${rt.name[0]}${100 + i}`,
             floor: String(Math.ceil((i + 1) / 2)),
             status: 'available',
-          })),
-        });
+          }))
+        );
 
-        await prisma.roomRate.create({
-          data: {
+        await db.insert(roomRates).values([
+          {
             roomTypeId: roomType.id,
             ratePlanId: ratePlans['Room Only'].id,
             startDate,
             endDate,
-            price: rt.basePrice,
-            extraAdultPrice: 15,
-            extraChildPrice: 8,
+            price: String(rt.basePrice),
+            extraAdultPrice: '15',
+            extraChildPrice: '8',
             currency: 'USD',
             priority: 1,
           },
-        });
-        await prisma.roomRate.create({
-          data: {
+          {
             roomTypeId: roomType.id,
             ratePlanId: ratePlans['Breakfast Included'].id,
             startDate,
             endDate,
-            price: rt.basePrice + 20,
-            extraAdultPrice: 20,
-            extraChildPrice: 10,
+            price: String(rt.basePrice + 20),
+            extraAdultPrice: '20',
+            extraChildPrice: '10',
             currency: 'USD',
             priority: 1,
           },
-        });
+        ]);
       }
     }
   }
+  /* eslint-enable no-await-in-loop */
 }
 
 async function seedDestinationsAndTours() {
@@ -237,10 +269,12 @@ async function seedDestinationsAndTours() {
     { name: 'Sylhet', country: 'Bangladesh' },
     { name: 'Sajek', country: 'Bangladesh' },
   ];
-  const destinations = {};
+
+  /* eslint-disable no-await-in-loop -- the seed is deliberately sequential */
+  const created = {};
   for (const d of destinationDefs) {
-    const existing = await prisma.destination.findFirst({ where: { name: d.name } });
-    destinations[d.name] = existing || (await prisma.destination.create({ data: d }));
+    const { row } = await findOrCreate(destinations, eq(destinations.name, d.name), d);
+    created[d.name] = row;
   }
 
   const tourDefs = [
@@ -250,27 +284,26 @@ async function seedDestinationsAndTours() {
   ];
 
   for (const t of tourDefs) {
-    const destination = destinations[t.destination];
-    const existing = await prisma.tourPackage.findFirst({ where: { name: t.name } });
-    const tourPackage =
-      existing ||
-      (await prisma.tourPackage.create({
-        data: {
-          destinationId: destination.id,
-          name: t.name,
-          description: `Explore ${t.destination} over ${t.durationDays} unforgettable days.`,
-          durationDays: t.durationDays,
-          price: t.price,
-          maxParticipants: t.maxParticipants,
-          includedServices: 'Hotel, transport, breakfast',
-          excludedServices: 'Personal expenses',
-          status: 'active',
-        },
-      }));
+    const destination = created[t.destination];
+    const { row: tourPackage, created: tourCreated } = await findOrCreate(
+      tourPackages,
+      eq(tourPackages.name, t.name),
+      {
+        destinationId: destination.id,
+        name: t.name,
+        description: `Explore ${t.destination} over ${t.durationDays} unforgettable days.`,
+        durationDays: t.durationDays,
+        price: String(t.price),
+        maxParticipants: t.maxParticipants,
+        includedServices: 'Hotel, transport, breakfast',
+        excludedServices: 'Personal expenses',
+        status: 'active',
+      }
+    );
 
-    if (!existing) {
-      await prisma.tourItinerary.createMany({
-        data: Array.from({ length: t.durationDays }, (_, i) => ({
+    if (tourCreated) {
+      await db.insert(tourItineraries).values(
+        Array.from({ length: t.durationDays }, (_, i) => ({
           tourPackageId: tourPackage.id,
           dayNumber: i + 1,
           title: `Day ${i + 1}`,
@@ -278,22 +311,27 @@ async function seedDestinationsAndTours() {
           meals: 'Breakfast',
           accommodation: `${t.destination} hotel`,
           transportation: 'Private vehicle',
-        })),
-      });
+        }))
+      );
     }
   }
+  /* eslint-enable no-await-in-loop */
 }
 
-async function seedSampleCustomerAndBooking(agency) {
+async function seedSampleCustomer(agency) {
   console.log('Seeding a sample customer...');
   const email = 'customer@example.com';
-  const passwordHash = await bcryptHasher.hash('Customer@12345');
 
-  const customerRole = await prisma.role.findUnique({ where: { name: ROLES.CUSTOMER } });
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: {},
-    create: {
+  const existing = await userRepository.findByEmail(email);
+  if (existing) return existing;
+
+  const passwordHash = await bcryptHasher.hash('Customer@12345');
+  const [customerRole] = await db.select().from(roles).where(eq(roles.name, ROLES.CUSTOMER)).limit(1);
+
+  // The user, their role and their customer profile in one transaction --
+  // the same path self-registration takes.
+  return userRepository.createCustomerAccount(
+    {
       firstName: 'Jane',
       lastName: 'Doe',
       email,
@@ -301,11 +339,12 @@ async function seedSampleCustomerAndBooking(agency) {
       isEmailVerified: true,
       status: 'active',
       agencyId: agency.id,
-      userRoles: customerRole ? { create: { roleId: customerRole.id } } : undefined,
-      customer: { create: { firstName: 'Jane', lastName: 'Doe', email, nationality: 'Bangladeshi' } },
     },
-  });
-  return user;
+    {
+      roleId: customerRole?.id,
+      customer: { firstName: 'Jane', lastName: 'Doe', email, nationality: 'Bangladeshi' },
+    }
+  );
 }
 
 async function main() {
@@ -316,7 +355,7 @@ async function main() {
   await seedHotels(agency, amenities, ratePlans);
   await seedServices();
   await seedDestinationsAndTours();
-  await seedSampleCustomerAndBooking(agency);
+  await seedSampleCustomer(agency);
 
   console.log('\nSeed complete.');
   console.log('DEVELOPMENT ONLY credentials:');
@@ -330,5 +369,5 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await disconnectDb();
   });

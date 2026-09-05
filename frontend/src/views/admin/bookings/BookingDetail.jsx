@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
+  ArrowLeftIcon,
   Button,
   Card,
   ConfirmDialog,
@@ -52,6 +53,7 @@ const PAYMENT_COLUMNS = [
 /** Booking detail: guests, rooms, services, payments, status history, and permission-gated lifecycle actions. */
 export function BookingDetail() {
   const { id } = useParams();
+  const router = useRouter();
   const { show } = useToast();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -141,13 +143,18 @@ export function BookingDetail() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">{booking.bookingNumber}</h1>
+          <div className="page-title-row">
+            <h1 className="page-title">{booking.bookingNumber}</h1>
+            <StatusBadge status={booking.status} />
+          </div>
           <p className="page-subtitle">
             {booking.hotel?.name} &middot; {formatDate(booking.checkIn)} to {formatDate(booking.checkOut)}
           </p>
         </div>
         <div className="page-actions">
-          <StatusBadge status={booking.status} />
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/bookings')}>
+            Back
+          </Button>
           {canConfirm && ['pending', 'held'].includes(booking.status) && (
             <Button variant="primary" loading={busyAction === 'confirm'} onClick={handleConfirmAction}>
               Confirm

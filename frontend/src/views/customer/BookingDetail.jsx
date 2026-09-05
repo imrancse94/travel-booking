@@ -100,13 +100,15 @@ export function BookingDetail() {
     <div className="container page-section">
       <div className="page-header">
         <div>
-          <h1 className="page-title">{booking.bookingNumber}</h1>
+          <div className="page-title-row">
+            <h1 className="page-title">{booking.bookingNumber}</h1>
+            <StatusBadge status={booking.status} />
+          </div>
           <p className="page-subtitle">
             {booking.hotel?.name} &middot; {formatDate(booking.checkIn)} to {formatDate(booking.checkOut)}
           </p>
         </div>
         <div className="page-actions">
-          <StatusBadge status={booking.status} />
           {canCancel && (
             <Button variant="danger" onClick={() => setConfirmOpen(true)}>
               Cancel Booking

@@ -7,19 +7,23 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EditIcon,
   Input,
   Modal,
   Pagination,
+  PlusCircleIcon,
   SearchFilterBar,
   SectionTabs,
   Select,
   StatusBadge,
   Table,
+  TrashIcon,
   useToast,
 } from '../../../components/ui/index.js';
 import * as transportService from '../../../services/transportService.js';
 import { ENTITY_STATUS_OPTIONS } from '../../../constants/options.js';
 import { TRANSPORT_SECTION_TABS } from './transportNav.js';
+import { MAX_PAGE_SIZE } from '../../../constants/pagination.js';
 
 const EMPTY_FORM = { name: '', phone: '', licenseNumber: '', vehicleId: '', status: 'active' };
 
@@ -41,7 +45,7 @@ export function DriverList() {
 
   useEffect(() => {
     transportService
-      .listVehicles({ limit: 200 })
+      .listVehicles({ limit: MAX_PAGE_SIZE })
       .then((res) => setVehicles(res.data || []))
       .catch(() => setVehicles([]));
   }, []);
@@ -103,16 +107,16 @@ export function DriverList() {
     { key: 'status', header: 'Status', render: (d) => <StatusBadge status={d.status} /> },
     {
       key: 'actions',
-      header: '',
+      header: 'Action',
       render: (d) => (
         <div className="inline-actions">
           {canUpdate && (
-            <Button variant="ghost" onClick={() => openEdit(d)}>
+            <Button icon={<EditIcon />} variant="primary" onClick={() => openEdit(d)}>
               Edit
             </Button>
           )}
           {canDelete && (
-            <Button variant="ghost" onClick={() => setPendingDelete(d)}>
+            <Button icon={<TrashIcon />} variant="danger" onClick={() => setPendingDelete(d)}>
               Delete
             </Button>
           )}
@@ -130,7 +134,7 @@ export function DriverList() {
           <h1 className="page-title">Drivers</h1>
           <p className="page-subtitle">Drivers assigned to fleet vehicles.</p>
         </div>
-        <div className="page-actions">{canCreate && <Button onClick={openCreate}>+ New Driver</Button>}</div>
+        <div className="page-actions">{canCreate && <Button variant="success" onClick={openCreate} icon={<PlusCircleIcon />}>New Driver</Button>}</div>
       </div>
 
       <Card>

@@ -5,6 +5,7 @@ import { Card, Input, Loader, Modal, Pagination, Select, StatusBadge, Table, use
 import * as activityLogService from '../../../services/activityLogService.js';
 import { useDebounce } from '../../../hooks/useDebounce.js';
 import { toastFromApiError } from '../../../utils/formErrors.js';
+import { formatTime, formatDateTime } from '../../../utils/format.js';
 
 const OUTCOME_OPTIONS = [
   { value: 'success', label: 'Success' },
@@ -91,7 +92,7 @@ export function ActivityLogList() {
     {
       key: 'time',
       label: 'When',
-      render: (row) => <span className="log-time">{row.time ? row.time.slice(11, 19) : '—'}</span>,
+      render: (row) => <span className="log-time">{formatTime(row.time)}</span>,
     },
     { key: 'action', label: 'Action' },
     {
@@ -216,7 +217,7 @@ export function ActivityLogList() {
             <dl className="detail-list">
               <div>
                 <dt className="detail-item__label">Time</dt>
-                <dd className="detail-item__value">{selected.time}</dd>
+                <dd className="detail-item__value">{formatDateTime(selected.time)}</dd>
               </div>
               <div>
                 <dt className="detail-item__label">Outcome</dt>

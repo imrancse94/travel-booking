@@ -5,12 +5,16 @@ import './Button.css';
 const VARIANT_CLASS = {
   primary: 'btn btn--primary',
   secondary: 'btn btn--secondary',
+  success: 'btn btn--success',
   danger: 'btn btn--danger',
   ghost: 'btn btn--ghost',
 };
 
 /**
- * Base button used across the admin UI. Variants: primary/secondary/danger/ghost.
+ * Base button used across the admin UI. Variants: primary/secondary/success/danger/ghost.
+ * By convention: primary edits, success adds, danger deletes.
+ * Pass `icon` for a leading glyph (see icons.jsx); it strokes in currentColor,
+ * so it takes the variant's text colour without any per-call styling.
  * Pass `loading` to show a spinner and disable the button while an action is in flight.
  * Pass `as={Link}` (plus the target's own props, e.g. `to`) to render a
  * router link styled as a button -- useful for "+ New X" actions.
@@ -18,6 +22,7 @@ const VARIANT_CLASS = {
 export function Button({
   as: Component = 'button',
   variant = 'primary',
+  icon = null,
   loading = false,
   disabled = false,
   type = 'button',
@@ -32,7 +37,9 @@ export function Button({
 
   return (
     <Component className={classes} {...nativeButtonProps} {...rest}>
+      {/* The spinner takes the icon's place rather than sitting beside it. */}
       {loading && <span className="btn__spinner" aria-hidden="true" />}
+      {!loading && icon && <span className="btn__icon">{icon}</span>}
       <span className="btn__label">{children}</span>
     </Component>
   );

@@ -1,4 +1,4 @@
-// Fixed vocabularies mirrored from backend/prisma/schema.prisma enums, used
+// Fixed vocabularies mirrored from the Postgres enums in backend/src/db/schema.js, used
 // to populate <Select> filter/form controls across the admin pages.
 
 export const BOOKING_STATUS_OPTIONS = [

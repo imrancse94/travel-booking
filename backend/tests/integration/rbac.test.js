@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import { createApp } from '../../src/app.js';
-import { prisma } from '../../src/config/prisma.js';
+import { disconnectDb } from '../../src/db/index.js';
 import { ensureRolesAndPermissions, createAdmin, createCustomerUser } from '../helpers/fixtures.js';
 
 const app = createApp();
@@ -24,7 +24,7 @@ describe('RBAC / authorization', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectDb();
   });
 
   it('blocks unauthenticated requests to protected resources', async () => {

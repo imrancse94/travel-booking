@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button, Input, Modal, Select } from '../../../components/ui/index.js';
+import { useCurrencyOptions } from '../../../hooks/useCurrencyOptions.js';
 
 const EMPTY = {
   roomTypeId: '',
@@ -20,6 +21,9 @@ const EMPTY = {
  */
 export function RoomRateForm({ isOpen, onClose, onSubmit, saving, roomTypes, ratePlans, initialValues }) {
   const [form, setForm] = useState(EMPTY);
+  // The agency-wide default from Settings, not a per-row choice -- every rate
+  // is recorded in it, so the field just shows it rather than asking again.
+  const { defaultCurrency } = useCurrencyOptions();
 
   useEffect(() => {
     if (isOpen) setForm({ ...EMPTY, ...initialValues });
@@ -33,6 +37,7 @@ export function RoomRateForm({ isOpen, onClose, onSubmit, saving, roomTypes, rat
     e.preventDefault();
     onSubmit({
       ...form,
+      currency: defaultCurrency,
       price: Number(form.price),
       extraAdultPrice: Number(form.extraAdultPrice || 0),
       extraChildPrice: Number(form.extraChildPrice || 0),
@@ -76,7 +81,13 @@ export function RoomRateForm({ isOpen, onClose, onSubmit, saving, roomTypes, rat
           <Input label="Start Date" type="date" required value={form.startDate} onChange={(e) => setField('startDate', e.target.value)} />
           <Input label="End Date" type="date" required value={form.endDate} onChange={(e) => setField('endDate', e.target.value)} />
           <Input label="Price" type="number" step="0.01" required value={form.price} onChange={(e) => setField('price', e.target.value)} />
-          <Input label="Currency" value={form.currency} onChange={(e) => setField('currency', e.target.value)} />
+          <Select
+            label="Currency"
+            value={defaultCurrency}
+            disabled
+            hint="Set in Settings > Currency & Tax."
+            options={[{ value: defaultCurrency, label: defaultCurrency }]}
+          />
           <Input
             label="Extra Adult Price"
             type="number"

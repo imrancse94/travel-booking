@@ -48,14 +48,19 @@ export async function findRoomRateById(id) {
 }
 
 export async function listRoomRatesForRoomType(roomTypeId, { limit, skip } = {}) {
-  const where = eq(roomRates.roomTypeId, roomTypeId);
-  // The caller omits paging when it wants every rate for a room type.
+  return listRoomRates({ roomTypeId, limit, skip });
+}
+
+/** `roomTypeId` narrows to one room type; omitted, it lists across all of them. */
+export async function listRoomRates({ roomTypeId, limit, skip } = {}) {
+  const where = roomTypeId ? eq(roomRates.roomTypeId, roomTypeId) : undefined;
+  // The caller omits paging when it wants every matching rate.
   const paging = skip !== undefined && limit !== undefined ? { limit, offset: skip } : {};
 
   const [items, [{ value: total }]] = await Promise.all([
     db.query.roomRates.findMany({
       where,
-      with: { ratePlan: true },
+      with: { ratePlan: true, roomType: true },
       orderBy: [asc(roomRates.startDate), desc(roomRates.priority)],
       ...paging,
     }),

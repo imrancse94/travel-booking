@@ -7,14 +7,17 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EditIcon,
   Input,
   Modal,
   Pagination,
+  PlusCircleIcon,
   SearchFilterBar,
   SectionTabs,
   Select,
   StatusBadge,
   Table,
+  TrashIcon,
   useToast,
 } from '../../../components/ui/index.js';
 import * as transportService from '../../../services/transportService.js';
@@ -88,16 +91,16 @@ export function VehicleList() {
     { key: 'status', header: 'Status', render: (v) => <StatusBadge status={v.status} /> },
     {
       key: 'actions',
-      header: '',
+      header: 'Action',
       render: (v) => (
         <div className="inline-actions">
           {canUpdate && (
-            <Button variant="ghost" onClick={() => openEdit(v)}>
+            <Button icon={<EditIcon />} variant="primary" onClick={() => openEdit(v)}>
               Edit
             </Button>
           )}
           {canDelete && (
-            <Button variant="ghost" onClick={() => setPendingDelete(v)}>
+            <Button icon={<TrashIcon />} variant="danger" onClick={() => setPendingDelete(v)}>
               Delete
             </Button>
           )}
@@ -115,7 +118,7 @@ export function VehicleList() {
           <h1 className="page-title">Vehicles</h1>
           <p className="page-subtitle">Cars, microbuses, buses, vans and minibuses in the fleet.</p>
         </div>
-        <div className="page-actions">{canCreate && <Button onClick={openCreate}>+ New Vehicle</Button>}</div>
+        <div className="page-actions">{canCreate && <Button variant="success" onClick={openCreate} icon={<PlusCircleIcon />}>New Vehicle</Button>}</div>
       </div>
 
       <Card>

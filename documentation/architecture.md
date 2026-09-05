@@ -31,7 +31,7 @@ Browser (admin / customer)
 **Backend**
 - Node.js 20 LTS, plain JavaScript (ES Modules, no TypeScript, no build step — `node --watch` in dev, `node src/server.js` in production)
 - Express 4 for HTTP routing and middleware
-- Prisma ORM (`@prisma/client` + `prisma` CLI) against PostgreSQL — the single chosen data-access layer for the whole project (per the "choose one ORM" instruction)
+- Drizzle ORM (`drizzle-orm` + the `drizzle-kit` CLI) against PostgreSQL — the single chosen data-access layer for the whole project (per the "choose one ORM" instruction)
 - Redis via `ioredis`, wrapped by `RedisClient`
 - `zod` for request validation, `jsonwebtoken` for JWT, `bcrypt` for password hashing, `pino`/`pino-http` for structured logging, `swagger-jsdoc` + `swagger-ui-express` for API docs, `pdfkit` for invoice PDFs, `multer` for uploads, `aws-sdk` for S3, `nodemailer` for SMTP
 - Jest + Supertest for backend tests
@@ -46,7 +46,7 @@ Browser (admin / customer)
 - Vitest + Testing Library for tests
 
 **Database**
-- PostgreSQL 16, accessed only through Prisma. Migrations are generated and applied with `prisma migrate`.
+- PostgreSQL 16, accessed only through Drizzle. Migrations are generated with `drizzle-kit generate` and applied by `src/db/migrate.js` (`npm run db:migrate`).
 
 **Infrastructure**
 - Docker multi-stage builds for both apps, Docker Compose for local development
@@ -62,8 +62,8 @@ Route            defines the URL/method and wires middleware (routes/*.routes.js
   -> Middleware  cross-cutting concerns: auth, RBAC, validation, rate limiting
   -> Controller  translates HTTP <-> service calls, no business logic (controllers/*.js)
   -> Service     business rules, transactions, orchestration (services/*.js)
-  -> Repository  data access for the handful of domains that warrant one on top of Prisma (repositories/*.js)
-  -> Database    PostgreSQL via Prisma Client
+  -> Repository  data access for the handful of domains that warrant one on top of Drizzle (repositories/*.js)
+  -> Database    PostgreSQL via the Drizzle client (src/db/index.js)
 ```
 
 Notes on how this is applied in practice:
@@ -71,9 +71,9 @@ Notes on how this is applied in practice:
 - **Route** files (`src/routes/*.routes.js`) only declare `router.get/post/put/delete(...)` and attach the middleware chain (`authenticate`, `requirePermission(...)`, `validate({...})`). They are mounted under a common prefix in `src/routes/index.js`.
 - **Middleware** (`src/middleware/`) handles authentication (`auth.js`), authorization (`rbac.js`), input validation (`validate.js`, backed by `zod` schemas in `src/validators/`), rate limiting (`rateLimiter.js`), request logging (`requestLogger.js`), and centralized error translation (`errorHandler.js`).
 - **Controller** functions (`src/controllers/*.js`) parse `req`, call one or more service functions, and shape the HTTP response using the shared envelope helpers in `src/utils/apiResponse.js`.
-- **Service** functions (`src/services/*.js`) contain the actual business rules — availability checks, pricing, booking state transitions, settings resolution, auditing — and are the only layer allowed to open a Prisma transaction. Services are plain functions, not classes, and are unit-testable independent of Express.
-- **Repository** functions (`src/repositories/*.js`) exist for the domains where isolating raw Prisma queries behind a narrow function set is worth it (currently `bookingRepository.js`, `userRepository.js`); simpler CRUD domains query Prisma directly from their service.
-- **Database** access always goes through the shared Prisma client (`src/config/prisma.js`); no module outside `config/` and the services/repositories layer touches Prisma directly.
+- **Service** functions (`src/services/*.js`) contain the actual business rules — availability checks, pricing, booking state transitions, settings resolution, auditing — and are the only layer allowed to open a database transaction. Services are plain functions, not classes, and are unit-testable independent of Express.
+- **Repository** functions (`src/repositories/*.js`) isolate Drizzle queries behind a narrow function set, one module per domain; a service that needs a transaction spanning several tables opens it directly with `db.transaction`.
+- **Database** access always goes through the shared Drizzle client (`src/db/index.js`); no module outside the services/repositories layer touches it directly.
 
 Cross-cutting infrastructure required by section 4 of the original spec is all present: Helmet, CORS (env-configured allow-list), `express-rate-limit`, centralized error handling (`AppError` subclasses + `errorHandler.js`), graceful shutdown on `SIGTERM`/`SIGINT` in `server.js`, and structured logging via the `Logger` wrapper around `pino`.
 
@@ -142,11 +142,12 @@ The repository intentionally uses **lowercase** `backend/` and `frontend/` as it
 /
 ├── backend/
 │   ├── src/
-│   │   ├── config/        # env, prisma client, redis client, logger, swagger, permissions
+│   │   ├── config/        # env, redis client, logger, swagger, permissions
+│   │   ├── db/            # Drizzle client, schema.js, relations.js, migrations/
 │   │   ├── controllers/   # HTTP <-> service glue, no business logic
 │   │   ├── middleware/    # auth, rbac, validate, rateLimiter, requestLogger, errorHandler
-│   │   ├── models/        # reserved for non-Prisma model helpers
-│   │   ├── repositories/  # narrow data-access modules on top of Prisma
+│   │   ├── models/        # reserved for non-ORM model helpers
+│   │   ├── repositories/  # narrow data-access modules on top of Drizzle
 │   │   ├── routes/        # one *.routes.js per resource, mounted in routes/index.js
 │   │   ├── services/      # business logic and transactions
 │   │   ├── validators/    # zod schemas
@@ -157,8 +158,7 @@ The repository intentionally uses **lowercase** `backend/` and `frontend/` as it
 │   │   ├── lib/            # wrapper classes around every external npm library
 │   │   ├── app.js
 │   │   └── server.js
-│   ├── prisma/            # schema.prisma + migrations/
-│   ├── migrations/         # reserved (Prisma migrations live under prisma/migrations)
+│   ├── migrations/         # reserved (migrations live under src/db/migrations)
 │   ├── seeds/              # database seed script
 │   ├── tests/              # unit/ and integration/
 │   ├── Dockerfile

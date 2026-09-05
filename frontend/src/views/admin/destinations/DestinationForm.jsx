@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Button, Card, Input, Loader, Select, Textarea, useToast } from '../../../components/ui/index.js';
+import { ArrowLeftIcon, Button, Card, Input, Loader, Select, Textarea, useToast } from '../../../components/ui/index.js';
 import * as destinationService from '../../../services/destinationService.js';
 import { ENTITY_STATUS_OPTIONS } from '../../../constants/options.js';
 import { apiFieldErrors, toastFromApiError, toastFromFieldErrors } from '../../../utils/formErrors.js';
@@ -74,6 +74,11 @@ export function DestinationForm() {
     <div>
       <div className="page-header">
         <h1 className="page-title">{isEdit ? 'Edit Destination' : 'New Destination'}</h1>
+        <div className="page-actions">
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/destinations')}>
+            Back
+          </Button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>

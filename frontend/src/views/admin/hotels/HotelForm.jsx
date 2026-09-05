@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Button, Card, Input, Select, Textarea, Loader, useToast } from '../../../components/ui/index.js';
+import { ArrowLeftIcon, Button, Card, Input, Select, Textarea, Loader, useToast } from '../../../components/ui/index.js';
 import * as hotelService from '../../../services/hotelService.js';
 import * as amenityService from '../../../services/amenityService.js';
 import { HOTEL_STATUS_OPTIONS } from '../../../constants/options.js';
@@ -133,6 +133,11 @@ export function HotelForm() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{isEdit ? 'Edit Hotel' : 'New Hotel'}</h1>
+        </div>
+        <div className="page-actions">
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/hotels')}>
+            Back
+          </Button>
         </div>
       </div>
 

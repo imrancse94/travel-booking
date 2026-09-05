@@ -1,8 +1,8 @@
-import { Prisma } from '@prisma/client';
 import { env } from '../config/env.js';
 import logger from '../config/logger.js';
 import { AppError } from '../utils/errors.js';
 import { failure } from '../utils/apiResponse.js';
+import { mapDbError } from '../utils/dbError.js';
 
 export function notFoundHandler(req, res) {
   return failure(res, { message: `Route not found: ${req.method} ${req.originalUrl}`, statusCode: 404 });
@@ -14,26 +14,13 @@ export function errorHandler(err, req, res, next) {
   let message = err.message || 'Internal server error';
   let errors = err.errors || [];
 
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    if (err.code === 'P2002') {
-      statusCode = 409;
-      message = `A record with this ${err.meta?.target?.join?.(', ') || 'value'} already exists`;
-    } else if (err.code === 'P2025') {
-      statusCode = 404;
-      message = 'Record not found';
-    } else if (err.code === 'P2003') {
-      statusCode = 409;
-      message = 'This action violates a related record constraint';
-    } else {
-      statusCode = 400;
-      // The bare message hid the cause: a connection-pool timeout (P2024) and a
-      // constraint violation both read as "Database request error". The code is
-      // withheld in production but is what makes a CI failure diagnosable.
-      message = env.isProduction ? 'Database request error' : `Database request error (${err.code})`;
-    }
+  const dbError = mapDbError(err, { isProduction: env.isProduction });
+  if (dbError) {
+    statusCode = dbError.statusCode;
+    message = dbError.message;
   }
 
-  const isOperational = err instanceof AppError || err instanceof Prisma.PrismaClientKnownRequestError;
+  const isOperational = err instanceof AppError || dbError !== null;
 
   logger.error(
     {

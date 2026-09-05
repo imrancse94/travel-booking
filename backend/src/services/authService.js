@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
-import { prisma } from '../config/prisma.js';
+import * as roleRepository from '../repositories/roleRepository.js';
+import * as userRepository from '../repositories/userRepository.js';
 import { env } from '../config/env.js';
 import { bcryptHasher } from '../lib/BcryptHasher.js';
 import { jwtService } from '../lib/JwtService.js';
@@ -20,7 +21,7 @@ async function issueTokenPair(user) {
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
   const refreshTokenHash = await bcryptHasher.hash(refreshToken);
-  await prisma.user.update({ where: { id: user.id }, data: { refreshTokenHash, lastLoginAt: new Date() } });
+  await userRepository.updateAuthFields(user.id, { refreshTokenHash, lastLoginAt: new Date() });
   return { accessToken, refreshToken };
 }
 
@@ -31,16 +32,16 @@ function sanitizeUser(user) {
 }
 
 export async function register({ firstName, lastName, email, phone, password }) {
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await userRepository.findByEmail(email);
   if (existing) throw new ConflictError('An account with this email already exists');
 
   const passwordHash = await bcryptHasher.hash(password);
   const emailVerifyToken = crypto.randomBytes(32).toString('hex');
 
-  const customerRole = await prisma.role.findUnique({ where: { name: ROLES.CUSTOMER } });
+  const customerRole = await roleRepository.findRoleByName(ROLES.CUSTOMER);
 
-  const user = await prisma.user.create({
-    data: {
+  const user = await userRepository.createCustomerAccount(
+    {
       firstName,
       lastName,
       email,
@@ -48,12 +49,9 @@ export async function register({ firstName, lastName, email, phone, password }) 
       passwordHash,
       emailVerifyToken,
       emailVerifyExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      userRoles: customerRole ? { create: { roleId: customerRole.id } } : undefined,
-      customer: {
-        create: { firstName, lastName, email, phone },
-      },
     },
-  });
+    { roleId: customerRole?.id, customer: { firstName, lastName, email, phone } }
+  );
 
   await sendTemplateEmail('welcome', email, { firstName }).catch(() => {});
   await sendTemplateEmail('emailVerification', email, {
@@ -65,10 +63,7 @@ export async function register({ firstName, lastName, email, phone, password }) 
 }
 
 export async function login({ email, password }, requestMeta = {}) {
-  const user = await prisma.user.findUnique({
-    where: { email },
-    include: { userRoles: { include: { role: { include: { rolePermissions: { include: { permission: true } } } } } } },
-  });
+  const user = await userRepository.findByEmailWithPermissions(email);
 
   if (!user || user.deletedAt) {
     throw new AuthenticationError('Invalid email or password');
@@ -102,7 +97,7 @@ export async function refreshTokens(refreshToken) {
     throw new AuthenticationError('Invalid token type');
   }
 
-  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  const user = await userRepository.findRawById(payload.sub);
   if (!user || !user.refreshTokenHash || user.deletedAt || user.status !== 'active') {
     throw new AuthenticationError('Session no longer valid');
   }
@@ -116,17 +111,17 @@ export async function refreshTokens(refreshToken) {
 }
 
 export async function logout(userId) {
-  await prisma.user.update({ where: { id: userId }, data: { refreshTokenHash: null } });
+  await userRepository.updateAuthFields(userId, { refreshTokenHash: null });
 }
 
 export async function requestPasswordReset(email) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await userRepository.findByEmail(email);
   if (!user) return; // Do not leak account existence.
 
   const token = crypto.randomBytes(32).toString('hex');
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { passwordResetToken: token, passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000) },
+  await userRepository.updateAuthFields(user.id, {
+    passwordResetToken: token,
+    passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
   });
 
   await sendTemplateEmail('passwordReset', email, {
@@ -136,38 +131,37 @@ export async function requestPasswordReset(email) {
 }
 
 export async function resetPassword({ token, newPassword }) {
-  const user = await prisma.user.findFirst({
-    where: { passwordResetToken: token, passwordResetExpires: { gt: new Date() } },
-  });
+  const user = await userRepository.findByLiveToken('passwordResetToken', token);
   if (!user) throw new ValidationError('Password reset token is invalid or has expired');
 
   const passwordHash = await bcryptHasher.hash(newPassword);
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { passwordHash, passwordResetToken: null, passwordResetExpires: null, refreshTokenHash: null },
+  await userRepository.updateAuthFields(user.id, {
+    passwordHash,
+    passwordResetToken: null,
+    passwordResetExpires: null,
+    refreshTokenHash: null,
   });
 }
 
 export async function changePassword(userId, { currentPassword, newPassword }) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await userRepository.findRawById(userId);
   if (!user) throw new NotFoundError('User not found');
 
   const valid = await bcryptHasher.compare(currentPassword, user.passwordHash);
   if (!valid) throw new ValidationError('Current password is incorrect');
 
   const passwordHash = await bcryptHasher.hash(newPassword);
-  await prisma.user.update({ where: { id: userId }, data: { passwordHash, refreshTokenHash: null } });
+  await userRepository.updateAuthFields(userId, { passwordHash, refreshTokenHash: null });
 }
 
 export async function verifyEmail(token) {
-  const user = await prisma.user.findFirst({
-    where: { emailVerifyToken: token, emailVerifyExpires: { gt: new Date() } },
-  });
+  const user = await userRepository.findByLiveToken('emailVerifyToken', token);
   if (!user) throw new ValidationError('Email verification token is invalid or has expired');
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { isEmailVerified: true, emailVerifyToken: null, emailVerifyExpires: null },
+  await userRepository.updateAuthFields(user.id, {
+    isEmailVerified: true,
+    emailVerifyToken: null,
+    emailVerifyExpires: null,
   });
 }
 

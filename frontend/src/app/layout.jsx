@@ -1,12 +1,24 @@
 import { Providers } from './providers.jsx';
 import { getSession } from '../lib/session.js';
+import { getBranding } from '../lib/branding.js';
 import '../styles/index.css';
 
-export const metadata = {
-  title: 'Global Travel Agency',
-  description: 'Hotel booking and travel packages, all in one place.',
-  icons: { icon: '/favicon.svg' },
-};
+/**
+ * The browser tab follows the agency name configured in Settings.
+ *
+ * `title` is a template: a page with its own `metadata.title` (e.g.
+ * not-found.jsx's "Page not found") gets it composed as "Page not found ·
+ * <agency name>"; a page with none falls back to the agency name alone. That
+ * keeps every page's tab title current without each one re-fetching branding.
+ */
+export async function generateMetadata() {
+  const branding = await getBranding();
+  return {
+    title: { default: branding.agency_name, template: `%s · ${branding.agency_name}` },
+    description: 'Hotel booking and travel packages, all in one place.',
+    icons: { icon: branding.agency_favicon_url || '/favicon.svg' },
+  };
+}
 
 export const viewport = {
   width: 'device-width',
@@ -31,12 +43,14 @@ export const viewport = {
  * rendering errored: NEXT_REDIRECT").
  */
 export default async function RootLayout({ children }) {
-  const session = await getSession();
+  const [session, branding] = await Promise.all([getSession(), getBranding()]);
 
   return (
     <html lang="en">
       <body>
-        <Providers session={session}>{children}</Providers>
+        <Providers session={session} branding={branding}>
+          {children}
+        </Providers>
       </body>
     </html>
   );

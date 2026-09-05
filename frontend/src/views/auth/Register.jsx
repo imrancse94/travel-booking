@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Button, Card, Input } from '../../components/ui/index.js';
+import { BrandMark, Button, Card, Input } from '../../components/ui/index.js';
 import * as authService from '../../services/authService.js';
 import { setFlash } from '../../lib/navState.js';
 import './auth-pages.css';
@@ -60,7 +60,7 @@ export function Register() {
     <div className="auth-page">
       <div className="auth-page__card">
         <Link href="/" className="auth-page__brand">
-          Global Travel Agency
+          <BrandMark />
         </Link>
         <Card>
           <h1 className="auth-page__title">Create your account</h1>

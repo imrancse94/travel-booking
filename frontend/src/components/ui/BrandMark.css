@@ -1,0 +1,46 @@
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* The logo is always a circle -- cropped to fill it, not letterboxed -- so a
+   wide wordmark and a square icon read as the same shape everywhere the app
+   shows it. The initials fallback below matches size and shape exactly, so
+   swapping between "no logo yet" and "logo uploaded" never shifts layout. */
+.brand-mark__logo {
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--color-surface);
+  border: 3px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+/* Shown until a logo is uploaded: the agency's initials on the brand colour. */
+.brand-mark__initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 5px solid var(--color-border);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.brand-mark__name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

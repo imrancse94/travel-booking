@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import {
+  ArrowLeftIcon,
   Button,
+  TrashIcon,
   Card,
-  ConfirmDialog,
   Input,
   Loader,
   StatusBadge,
@@ -30,13 +31,10 @@ export function HotelDetail() {
   const router = useRouter();
   const { show } = useToast();
   const canUpdate = usePermission('hotels.update');
-  const canDelete = usePermission('hotels.delete');
 
   const [hotel, setHotel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [newImageUrl, setNewImageUrl] = useState('');
   const [addingImage, setAddingImage] = useState(false);
 
@@ -52,19 +50,6 @@ export function HotelDetail() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function handleDelete() {
-    setDeleting(true);
-    try {
-      await hotelService.remove(id);
-      show('Hotel deleted', 'success');
-      router.push('/admin/hotels');
-    } catch (err) {
-      show(err.message, 'error');
-    } finally {
-      setDeleting(false);
-    }
-  }
 
   async function handleAddImage(e) {
     e.preventDefault();
@@ -107,21 +92,16 @@ export function HotelDetail() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">{hotel.name}</h1>
+          <div className="page-title-row">
+            <h1 className="page-title">{hotel.name}</h1>
+            <StatusBadge status={hotel.status} />
+          </div>
           <p className="page-subtitle">{[hotel.address, hotel.city, hotel.country].filter(Boolean).join(', ')}</p>
         </div>
         <div className="page-actions">
-          <StatusBadge status={hotel.status} />
-          {canUpdate && (
-            <Button variant="secondary" onClick={() => router.push(`/admin/hotels/${id}/edit`)}>
-              Edit
-            </Button>
-          )}
-          {canDelete && (
-            <Button variant="danger" onClick={() => setConfirmOpen(true)}>
-              Delete
-            </Button>
-          )}
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/hotels')}>
+            Back
+          </Button>
         </div>
       </div>
 
@@ -198,7 +178,7 @@ export function HotelDetail() {
               onChange={(e) => setNewImageUrl(e.target.value)}
               style={{ flex: 1 }}
             />
-            <Button type="submit" loading={addingImage}>
+            <Button variant="success" type="submit" loading={addingImage}>
               Add
             </Button>
           </form>
@@ -213,7 +193,7 @@ export function HotelDetail() {
                   style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
                 />
                 {canUpdate && (
-                  <Button variant="ghost" onClick={() => handleRemoveImage(img.id)} style={{ marginTop: 'var(--space-1)' }}>
+                  <Button icon={<TrashIcon />} variant="danger" onClick={() => handleRemoveImage(img.id)} style={{ marginTop: 'var(--space-1)' }}>
                     Remove
                   </Button>
                 )}
@@ -224,15 +204,6 @@ export function HotelDetail() {
           <p className="text-muted">No images uploaded yet.</p>
         )}
       </Card>
-
-      <ConfirmDialog
-        isOpen={confirmOpen}
-        title="Delete hotel"
-        message={`Delete "${hotel.name}"? This cannot be undone.`}
-        loading={deleting}
-        onCancel={() => setConfirmOpen(false)}
-        onConfirm={handleDelete}
-      />
     </div>
   );
 }

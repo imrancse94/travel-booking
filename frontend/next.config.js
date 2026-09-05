@@ -16,7 +16,14 @@ const nextConfig = {
   // `npm run dev`, where next.config.js is evaluated at startup.
   async rewrites() {
     const backend = process.env.BACKEND_ORIGIN || 'http://localhost:4000';
-    return [{ source: '/api/:path*', destination: `${backend}/api/:path*` }];
+    return [
+      { source: '/api/:path*', destination: `${backend}/api/:path*` },
+      // Uploaded files (logos, hotel images) are written to the backend's disk
+      // and served by its static handler. Without this the browser would ask
+      // Next for /uploads/... and get a 404 -- the upload would succeed and the
+      // image would never render.
+      { source: '/uploads/:path*', destination: `${backend}/uploads/:path*` },
+    ];
   },
 };
 

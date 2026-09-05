@@ -95,13 +95,13 @@ jobs:
 
     env:
       NODE_ENV: test
-      # connection_limit is explicit because the booking guard holds a
+      DATABASE_URL: postgresql://booking_user:booking_password@localhost:5432/booking_test
+      # The pool size is explicit because the booking guard holds a
       # pg_advisory_xact_lock for the life of its transaction, so N concurrent
-      # bookings need N connections. Prisma otherwise sizes the pool from the
-      # CPU count ((cores*2)+1), which is ~21 on a dev machine but 9 on a
-      # 4-core runner -- below the 10 simultaneous requests the concurrency
-      # suite fires, so every one of them failed with a pool timeout.
-      DATABASE_URL: postgresql://booking_user:booking_password@localhost:5432/booking_test?schema=public&connection_limit=25
+      # bookings need N connections. It has to stay above the 10 simultaneous
+      # requests the concurrency suite fires, or every one of them times out
+      # waiting for a connection.
+      DATABASE_POOL_MAX: 25
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-test-secret
       JWT_REFRESH_SECRET: ci-test-refresh-secret
@@ -126,11 +126,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Generate Prisma client
-        run: npx prisma generate
-
       - name: Apply database migrations
-        run: npx prisma migrate deploy
+        run: npm run db:migrate
 
       - name: Run tests
         run: npm test
@@ -350,6 +347,9 @@ jobs:
           # if you later point a separate domain at the API.
           CORS_ORIGIN=http://${{ secrets.AWS_EC2_IP_ADDRESS }}
 
+          # Absolute URLs for uploaded files (logo in emails, API consumers).
+          PUBLIC_URL=http://${{ secrets.AWS_EC2_IP_ADDRESS }}
+
           BOOKING_HOLD_MINUTES=10
           FILE_STORAGE_DRIVER=local
           PAYMENT_GATEWAY=${{ secrets.PAYMENT_GATEWAY || 'mock' }}
@@ -545,6 +545,19 @@ jobs:
                   proxy_read_timeout 60s;
               }
 
+              # Uploaded files are on the backend's disk, served by its static
+              # handler -- not by Next, which would 404 them.
+              location /uploads/ {
+                  proxy_pass         http://api_upstream;
+                  proxy_http_version 1.1;
+                  proxy_set_header   Connection "";
+                  proxy_set_header   Host $host;
+                  proxy_set_header   X-Forwarded-Proto $scheme;
+                  # Filenames carry a timestamp and random suffix, so a given
+                  # URL's bytes never change.
+                  add_header         Cache-Control "public, max-age=31536000, immutable" always;
+              }
+
               # Next emits content-hashed filenames under /_next/static, so a
               # given URL's bytes never change and can be cached indefinitely.
               location /_next/static/ {
@@ -649,7 +662,7 @@ jobs:
             # One-off container on the new image — never the running backend,
             # which may still be serving the previous release at this point.
             echo "Applying database migrations..."
-            $COMPOSE run --rm --no-deps backend npx prisma migrate deploy
+            $COMPOSE run --rm --no-deps backend npm run db:migrate
 
             # A bad vhost would take the whole site down on restart, so it is
             # checked before nginx is asked to use it.

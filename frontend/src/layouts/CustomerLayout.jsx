@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { Button } from '../components/ui/index.js';
+import { useBranding } from '../contexts/BrandingContext.jsx';
+import { BrandMark, Button } from '../components/ui/index.js';
 import '../styles/customer-pages.css';
 import './CustomerLayout.css';
 
@@ -19,6 +20,7 @@ const AUTHED_LINKS = [
 /** Shell for every customer-facing page: header (brand, nav, auth state) + footer. Nested pages render as {children}. */
 export function CustomerLayout({ children }) {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const { branding } = useBranding();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -48,7 +50,7 @@ export function CustomerLayout({ children }) {
       <header className="customer-header">
         <div className="customer-header__inner container">
           <Link href="/" className="customer-header__brand" onClick={() => setMenuOpen(false)}>
-            Global Travel Agency
+            <BrandMark />
           </Link>
 
           <button
@@ -117,7 +119,7 @@ export function CustomerLayout({ children }) {
               lag the client's around New Year. No layout impact, so the documented
               React escape hatch fits better than deferring it to a second pass. */}
           <p suppressHydrationWarning>
-            &copy; {new Date().getFullYear()} Global Travel Agency. All rights reserved.
+            &copy; {new Date().getFullYear()} {branding.agency_name}. All rights reserved.
           </p>
           <p className="text-muted">Hotel booking and travel packages, all in one place.</p>
         </div>

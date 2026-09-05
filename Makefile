@@ -20,7 +20,7 @@ POSTGRES_USER  ?= booking_user
 POSTGRES_DB    ?= booking_db
 POSTGRES_PASSWORD ?= booking_password
 TEST_DB        ?= booking_test
-TEST_DATABASE_URL ?= postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(PG_SERVICE):5432/$(TEST_DB)?schema=public
+TEST_DATABASE_URL ?= postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(PG_SERVICE):5432/$(TEST_DB)
 API_URL        ?= http://localhost:4000/api/v1
 WEB_URL        ?= http://localhost:5173
 MAIL_URL       ?= http://localhost:8026
@@ -143,22 +143,25 @@ pgadmin: ## Print the pgAdmin URL and the password its pre-registered connection
 
 ##@ Database
 
-migrate: ## Apply pending migrations (prisma migrate deploy)
-	$(EXEC) $(BACKEND) npx prisma migrate deploy
+migrate: ## Apply pending migrations
+	$(EXEC) $(BACKEND) npm run db:migrate
 
-migrate-new: ## Create + apply a migration after editing schema.prisma -- make migrate-new name=add_x
+migrate-new: ## Generate a migration from src/db/schema.js -- make migrate-new name=add_x
 	@test -n "$(name)" || { echo "usage: make migrate-new name=<description>"; exit 1; }
-	$(EXEC_TTY) $(BACKEND) npx prisma migrate dev --name $(name)
+	$(EXEC_TTY) $(BACKEND) npx drizzle-kit generate --name $(name)
+	$(MAKE) migrate
 
-migrate-reset: ## DESTRUCTIVE: drop the database and re-apply every migration
+db-pull: ## Regenerate src/db/schema.js by introspecting the live database
+	$(EXEC_TTY) $(BACKEND) npm run db:pull
+
+migrate-reset: ## DESTRUCTIVE: drop the schema and re-apply every migration
 	$(call confirm,This drops the dev database and all its data.)
-	$(EXEC_TTY) $(BACKEND) npx prisma migrate reset --force
+	$(EXEC) $(PG_SERVICE) psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -c \
+		"DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;"
+	$(MAKE) migrate
 
-prisma-generate: ## Regenerate the Prisma client
-	$(EXEC) $(BACKEND) npx prisma generate
-
-studio: ## Open Prisma Studio (needs a 5555:5555 port mapping on the backend service)
-	$(EXEC_TTY) $(BACKEND) npx prisma studio
+studio: ## Open Drizzle Studio (needs a 4983:4983 port mapping on the backend service)
+	$(EXEC_TTY) $(BACKEND) npm run db:studio
 
 seed: ## Load demo data (idempotent -- safe to re-run)
 	$(EXEC) $(BACKEND) npm run seed
@@ -175,7 +178,7 @@ test-backend: ## Run backend tests (Jest + Supertest) against a separate test da
 	@$(EXEC) $(PG_SERVICE) psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -tAc \
 		"SELECT 1 FROM pg_database WHERE datname='$(TEST_DB)'" | grep -q 1 \
 		|| $(EXEC) $(PG_SERVICE) createdb -U $(POSTGRES_USER) $(TEST_DB)
-	$(EXEC) -e DATABASE_URL=$(TEST_DATABASE_URL) $(BACKEND) npx prisma migrate deploy
+	$(EXEC) -e DATABASE_URL=$(TEST_DATABASE_URL) $(BACKEND) npm run db:migrate
 	$(EXEC) -e DATABASE_URL=$(TEST_DATABASE_URL) $(BACKEND) npm test
 
 test-frontend: ## Run frontend tests (Vitest)
@@ -215,11 +218,11 @@ local-deps: env ## Start only postgres + redis, for running the apps on the host
 	$(COMPOSE) up -d --wait $(PG_SERVICE) $(REDIS_SERVICE)
 
 local-install: ## npm ci in backend and frontend on the host
-	cd backend && npm ci && npx prisma generate
+	cd backend && npm ci
 	cd frontend && npm ci
 
 local-backend: ## Run the backend on the host (point DATABASE_URL/REDIS_URL at localhost first)
-	cd backend && npx prisma migrate deploy && npm run dev
+	cd backend && npm run db:migrate && npm run dev
 
 local-frontend: ## Run the Next.js dev server on the host
 	cd frontend && npm run dev
@@ -235,7 +238,7 @@ prune: ## Reclaim disk: prune dangling Docker build cache and images
 
 .PHONY: help setup env urls up dev rebuild deps-refresh down stop start restart restart-backend \
 	restart-frontend ps logs logs-backend logs-frontend health sh-backend sh-frontend \
-	psql redis-cli pgadmin migrate migrate-new migrate-reset prisma-generate studio seed db-reset \
+	psql redis-cli pgadmin migrate migrate-new db-pull migrate-reset studio seed db-reset \
 	test test-backend test-frontend smoke lint lint-backend lint-frontend lint-fix ci \
 	build build-backend build-frontend local-deps local-install local-backend \
 	local-frontend clean prune

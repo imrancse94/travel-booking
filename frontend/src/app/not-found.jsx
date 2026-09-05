@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Page not found · Global Travel Agency' };
+export const metadata = { title: 'Page not found' };
 
 /**
  * Renders the 404. It must RENDER, not redirect.

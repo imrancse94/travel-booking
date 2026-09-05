@@ -3,17 +3,21 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
+  ArrowLeftIcon,
   Button,
   Card,
   Input,
   Loader,
+  PlusCircleIcon,
   SectionTabs,
   Select,
   Textarea,
+  TrashIcon,
   useToast,
 } from '../../../components/ui/index.js';
 import * as tourService from '../../../services/tourService.js';
 import * as destinationService from '../../../services/destinationService.js';
+import { useCurrencyOptions } from '../../../hooks/useCurrencyOptions.js';
 import { ENTITY_STATUS_OPTIONS } from '../../../constants/options.js';
 import { TOUR_SECTION_TABS } from './toursNav.js';
 import { apiFieldErrors, toastFromApiError, toastFromFieldErrors } from '../../../utils/formErrors.js';
@@ -41,6 +45,9 @@ export function TourPackageForm() {
   const isEdit = Boolean(id);
   const router = useRouter();
   const { show } = useToast();
+  // The agency-wide default from Settings, not a per-package choice -- every
+  // tour is priced in it, so the field just shows it rather than asking again.
+  const { defaultCurrency } = useCurrencyOptions();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [destinations, setDestinations] = useState([]);
@@ -50,7 +57,10 @@ export function TourPackageForm() {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    destinationService.list({ limit: 100 }).then((res) => setDestinations(res.data || []));
+    destinationService
+      .list({ limit: 100 })
+      .then((res) => setDestinations(res.data || []))
+      .catch(() => setDestinations([]));
   }, []);
 
   useEffect(() => {
@@ -103,6 +113,7 @@ export function TourPackageForm() {
     setSaving(true);
     const payload = {
       ...form,
+      currency: defaultCurrency,
       durationDays: Number(form.durationDays),
       price: Number(form.price),
       maxParticipants: Number(form.maxParticipants),
@@ -134,6 +145,11 @@ export function TourPackageForm() {
 
       <div className="page-header">
         <h1 className="page-title">{isEdit ? 'Edit Tour Package' : 'New Tour Package'}</h1>
+        <div className="page-actions">
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/tours/packages')}>
+            Back
+          </Button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -159,7 +175,13 @@ export function TourPackageForm() {
                 onChange={(e) => setField('durationDays', e.target.value)}
               />
               <Input label="Price" type="number" step="0.01" required value={form.price} error={errors.price} onChange={(e) => setField('price', e.target.value)} />
-              <Input label="Currency" value={form.currency} onChange={(e) => setField('currency', e.target.value)} />
+              <Select
+                label="Currency"
+                value={defaultCurrency}
+                disabled
+                hint="Set in Settings > Currency & Tax."
+                options={[{ value: defaultCurrency, label: defaultCurrency }]}
+              />
               <Input
                 label="Max Participants"
                 type="number"
@@ -193,7 +215,7 @@ export function TourPackageForm() {
               {days.map((day, index) => (
                 <div key={index} className="day-editor__card">
                   {days.length > 1 && (
-                    <Button variant="danger" className="day-editor__remove" onClick={() => removeDay(index)}>
+                    <Button icon={<TrashIcon />} variant="danger" className="day-editor__remove" onClick={() => removeDay(index)}>
                       Remove
                     </Button>
                   )}
@@ -216,8 +238,8 @@ export function TourPackageForm() {
                   <Textarea label="Activities" value={day.activities} onChange={(e) => updateDay(index, 'activities', e.target.value)} />
                 </div>
               ))}
-              <Button type="button" variant="secondary" onClick={addDay}>
-                + Add Day
+              <Button type="button" variant="success" onClick={addDay} icon={<PlusCircleIcon />}>
+                Add Day
               </Button>
             </div>
           </div>

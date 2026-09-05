@@ -19,15 +19,12 @@
   min-width: 0;
 }
 
-/* One permission module (a heading plus its checkbox grid). */
+/* One permission module: a single accordion box (header + checkbox grid share
+   one border), not two separate bordered pieces. */
 .role-manager__module {
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.role-manager__module:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 
 .role-manager__roles {
@@ -70,19 +67,41 @@
   color: var(--color-text-muted);
 }
 
+.role-manager__search {
+  margin-bottom: var(--space-4);
+}
+
 .role-manager__modules {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
 
+/* The accordion header is a full-width button: the whole row toggles the
+   module open/closed, not just the chevron. It's the top of the box its
+   .role-manager__module parent draws the border for, so it carries no
+   border of its own -- only a bottom rule while the content below is open. */
 .role-manager__module-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: var(--space-2);
-  margin-bottom: var(--space-2);
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: var(--color-bg);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.role-manager__module-header[aria-expanded='true'] {
+  border-bottom-color: var(--color-border);
+}
+
+.role-manager__module-header:hover {
+  background: var(--color-border);
 }
 
 .role-manager__module-header h4 {
@@ -92,19 +111,38 @@
   text-transform: capitalize;
 }
 
+.role-manager__module-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.role-manager__module-count {
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+}
+
 .role-manager__toggle-all {
-  background: none;
-  border: none;
   color: var(--color-primary);
   font-size: 0.78rem;
   cursor: pointer;
-  padding: 0;
+}
+
+.role-manager__chevron {
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.role-manager__chevron--open {
+  transform: rotate(180deg);
 }
 
 .role-manager__module-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: var(--space-2);
+  padding: var(--space-3);
 }
 
 .role-manager__perm {
@@ -189,4 +227,58 @@
   background: #fffbeb;
   color: #92400e;
   font-size: 0.875rem;
+}
+
+/* Settings > Currency & Tax: the admin-managed list of currency codes every
+   price-with-currency form (room rates, tour packages) picks from. */
+.currency-field {
+  margin-bottom: var(--space-5);
+}
+
+.currency-field__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.currency-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.currency-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.currency-chip__remove:hover {
+  opacity: 1;
+}
+
+.currency-field__add {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  max-width: 320px;
+}
+
+.currency-field__add .form-field {
+  flex: 1;
+  margin-bottom: 0;
 }

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
+  ArrowLeftIcon,
   Button,
   Card,
   Input,
@@ -29,6 +30,7 @@ const REFUND_COLUMNS = [
 /** Payment detail with its refund history and a refund action. */
 export function PaymentDetail() {
   const { id } = useParams();
+  const router = useRouter();
   const { show } = useToast();
   const canRefund = usePermission('payments.refund');
 
@@ -86,7 +88,10 @@ export function PaymentDetail() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Payment {payment.transactionId || payment.id}</h1>
+          <div className="page-title-row">
+            <h1 className="page-title">Payment {payment.transactionId || payment.id}</h1>
+            <StatusBadge status={payment.status} />
+          </div>
           <p className="page-subtitle">
             {payment.booking ? (
               <>
@@ -98,7 +103,9 @@ export function PaymentDetail() {
           </p>
         </div>
         <div className="page-actions">
-          <StatusBadge status={payment.status} />
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/payments')}>
+            Back
+          </Button>
           {canRefund && canBeRefunded && <Button variant="danger" onClick={() => setRefundOpen(true)}>Refund</Button>}
         </div>
       </div>

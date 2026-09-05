@@ -4,12 +4,10 @@ FROM node:20-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package*.json ./
-COPY prisma ./prisma
 
 # ---------------------------------------------------------------------------
 FROM base AS dependencies
 RUN npm ci
-RUN npx prisma generate
 
 # ---------------------------------------------------------------------------
 FROM base AS development
@@ -22,7 +20,6 @@ CMD ["npm", "run", "dev"]
 # ---------------------------------------------------------------------------
 FROM base AS production-dependencies
 RUN npm ci --omit=dev
-RUN npx prisma generate
 
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS production
@@ -30,7 +27,6 @@ ENV NODE_ENV=production
 RUN apk add --no-cache openssl && addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 COPY --from=production-dependencies /app/node_modules ./node_modules
-COPY prisma ./prisma
 COPY src ./src
 COPY seeds ./seeds
 COPY package*.json ./

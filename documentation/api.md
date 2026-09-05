@@ -261,7 +261,7 @@ Note `/rooms/availability` is intentionally mounted **before** `/rooms` in `rout
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/health` | Process liveness only. |
-| GET | `/health/db` | Round-trips a query through Prisma. |
+| GET | `/health/db` | Round-trips a `SELECT 1` through the connection pool. |
 | GET | `/health/redis` | Pings Redis. |
 
 **Uploads** (`/uploads`, requires auth)

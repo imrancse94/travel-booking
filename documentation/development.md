@@ -85,25 +85,32 @@ which drops only the dependency volumes and brings the stack back up.
 Migrations run **automatically** every time the `backend` container starts — its Compose `command` is:
 
 ```
-sh -c "npx prisma migrate deploy && npm run dev"
+sh -c "npm run db:migrate && npm run dev"
 ```
 
 (see `docker-compose.yml`), so `docker compose up` alone brings the schema fully up to date; there is no separate manual migration step for normal day-to-day development.
 
-To run Prisma commands manually (e.g. after changing `schema.prisma`) against the running stack:
+To run migration commands manually against the running stack:
 
 ```bash
-# Apply any pending migrations without creating new ones (what the container does automatically)
-docker compose exec backend npx prisma migrate deploy
+# Apply any pending migrations (what the container does automatically)
+docker compose exec backend npm run db:migrate
 
-# Create + apply a new migration after editing schema.prisma
-docker compose exec backend npx prisma migrate dev --name <description>
+# Generate a new migration after editing src/db/schema.js, then apply it
+docker compose exec backend npx drizzle-kit generate --name <description>
+docker compose exec backend npm run db:migrate
 
-# Danger: drops and recreates the database, then re-applies all migrations
-docker compose exec backend npx prisma migrate reset --force
+# Regenerate src/db/schema.js by introspecting the live database
+docker compose exec backend npm run db:pull
 ```
 
-`npm run prisma:migrate`, `npm run prisma:migrate:deploy`, and `npm run prisma:migrate:reset` in `backend/package.json` are shortcuts for the same commands.
+`make migrate`, `make migrate-new name=<description>`, `make db-pull` and `make migrate-reset`
+(destructive: drops the schema and re-applies every migration) wrap the same commands.
+
+The first migration is the introspected baseline of the schema. A database that
+already has those tables is recorded as up to date rather than re-created, so an
+existing environment adopts the migration ledger instead of failing on the first
+`CREATE TYPE`; see `backend/src/db/migrate.js`.
 
 ## 5. Seed data
 
@@ -185,15 +192,15 @@ docker compose exec frontend npm run lint
 
 Both use ESLint (`.eslintrc.json` in each package). `npm run lint:fix` auto-fixes what it can.
 
-## 8. Prisma Studio
+## 8. Drizzle Studio
 
 A visual database browser for the running Postgres instance:
 
 ```bash
-docker compose exec backend npx prisma studio
+docker compose exec backend npm run db:studio
 ```
 
-Prisma Studio binds to port 5555 inside the container; if you need to reach it from the host, run it with an explicit port mapping instead (e.g. `docker compose exec backend npx prisma studio --port 5555` and add a `5555:5555` port mapping to the `backend` service, or run `npx prisma studio` directly on the host against `DATABASE_URL=postgresql://booking_user:booking_password@localhost:5432/booking_db`).
+Drizzle Studio binds to port 4983 inside the container; to reach it from the host, add a `4983:4983` port mapping to the `backend` service, or run `npx drizzle-kit studio` directly on the host against `DATABASE_URL=postgresql://booking_user:booking_password@localhost:5432/booking_db`.
 
 ## 9. Default URLs
 
@@ -215,8 +222,7 @@ Each package can also run directly on a host Node 20 install against the Dockeri
 ```bash
 cd backend
 npm install
-npx prisma generate
-npx prisma migrate deploy
+npm run db:migrate
 npm run dev
 ```
 

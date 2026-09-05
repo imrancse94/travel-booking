@@ -7,6 +7,17 @@ import { updateSettingSchema } from '../validators/setting.validators.js';
 
 export const router = Router();
 
+/**
+ * @openapi
+ * /settings/public:
+ *   get:
+ *     summary: Branding and formatting settings visible without a session
+ *     tags: [Settings]
+ */
+// Mounted before the guard below: the sign-in page needs the agency's name and
+// logo before anyone has authenticated.
+router.get('/public', settingController.getPublicSettings);
+
 router.use(authenticate);
 
 /**

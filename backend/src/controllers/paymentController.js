@@ -4,7 +4,7 @@ import { parsePagination } from '../utils/pagination.js';
 import { AuthorizationError, NotFoundError } from '../utils/errors.js';
 import * as paymentService from '../services/paymentService.js';
 import * as customerRepository from '../repositories/customerRepository.js';
-import { prisma } from '../config/prisma.js';
+import * as bookingRepository from '../repositories/bookingRepository.js';
 
 function isStaff(req) {
   return req.user.roles.some((r) => r !== 'Customer');
@@ -38,7 +38,7 @@ export const create = asyncHandler(async (req, res) => {
   if (!isStaff(req)) {
     // A customer may only pay toward their own booking.
     const own = await customerRepository.findByUserId(req.user.id);
-    const booking = own ? await prisma.booking.findUnique({ where: { id: req.body.bookingId } }) : null;
+    const booking = own ? await bookingRepository.findBookingRawById(req.body.bookingId) : null;
     if (!own || !booking || booking.customerId !== own.id) throw new NotFoundError('Booking not found');
   }
 

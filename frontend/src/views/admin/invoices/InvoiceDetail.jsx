@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { Button, Card, Loader, StatusBadge, Table, useToast } from '../../../components/ui/index.js';
+import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeftIcon, Button, Card, Loader, StatusBadge, Table, useToast } from '../../../components/ui/index.js';
 import * as invoiceService from '../../../services/invoiceService.js';
 import { formatCurrency, formatDate, triggerBlobDownload } from '../../../utils/format.js';
 
@@ -17,6 +17,7 @@ const ITEM_COLUMNS = [
 /** Invoice detail: company/customer/booking summary, line items, and a PDF download action. */
 export function InvoiceDetail() {
   const { id } = useParams();
+  const router = useRouter();
   const { show } = useToast();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +62,10 @@ export function InvoiceDetail() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">{invoice.invoiceNumber}</h1>
+          <div className="page-title-row">
+            <h1 className="page-title">{invoice.invoiceNumber}</h1>
+            <StatusBadge status={invoice.status} />
+          </div>
           <p className="page-subtitle">
             {invoice.booking ? (
               <>
@@ -73,7 +77,9 @@ export function InvoiceDetail() {
           </p>
         </div>
         <div className="page-actions">
-          <StatusBadge status={invoice.status} />
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/invoices')}>
+            Back
+          </Button>
           <Button variant="secondary" loading={downloading} onClick={handleDownload}>
             Download PDF
           </Button>

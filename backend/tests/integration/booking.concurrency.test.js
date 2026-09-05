@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import { createApp } from '../../src/app.js';
-import { prisma } from '../../src/config/prisma.js';
+import { and, eq } from 'drizzle-orm';
+import { db, disconnectDb } from '../../src/db/index.js';
+import { bookingRooms } from '../../src/db/schema.js';
 import { ensureRolesAndPermissions, createCustomerUser, createBookableHotel, sampleGuest } from '../helpers/fixtures.js';
 
 const app = createApp();
@@ -43,7 +45,7 @@ function summarise(responses, allowed = [201, 409]) {
 
 describe('concurrent booking / double-booking prevention', () => {
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectDb();
   });
 
   beforeAll(async () => {
@@ -78,9 +80,16 @@ describe('concurrent booking / double-booking prevention', () => {
     expect(unexpected).toEqual([]);
     expect(byStatus).toEqual({ 201: 1, 409: N - 1 });
 
-    const bookingRoomsForRoom = await prisma.bookingRoom.findMany({
-      where: { roomId: room.id, checkIn: new Date('2028-01-05'), checkOut: new Date('2028-01-08') },
-    });
+    const bookingRoomsForRoom = await db
+      .select()
+      .from(bookingRooms)
+      .where(
+        and(
+          eq(bookingRooms.roomId, room.id),
+          eq(bookingRooms.checkIn, new Date('2028-01-05')),
+          eq(bookingRooms.checkOut, new Date('2028-01-08'))
+        )
+      );
     expect(bookingRoomsForRoom).toHaveLength(1);
   }, CONCURRENCY_TEST_TIMEOUT_MS);
 

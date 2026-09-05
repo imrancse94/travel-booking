@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import { createApp } from '../../src/app.js';
-import { prisma } from '../../src/config/prisma.js';
+import { disconnectDb } from '../../src/db/index.js';
 import { ensureRolesAndPermissions, createAdmin } from '../helpers/fixtures.js';
 
 const app = createApp();
@@ -17,7 +17,7 @@ describe('hotel CRUD', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectDb();
   });
 
   it('creates, reads, updates, and soft-deletes a hotel', async () => {

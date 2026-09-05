@@ -59,6 +59,13 @@
         "afterAll": "readonly",
         "afterEach": "readonly"
       }
+    },
+    {
+      "files": ["src/server/**/*.js"],
+      "env": {
+        "browser": false,
+        "node": true
+      }
     }
   ]
 }

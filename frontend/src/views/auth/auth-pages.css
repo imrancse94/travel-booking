@@ -16,8 +16,8 @@
 }
 
 .auth-page__brand {
-  display: block;
-  text-align: center;
+  display: flex;
+  justify-content: center;
   font-weight: 800;
   font-size: 1.15rem;
   color: var(--color-text);

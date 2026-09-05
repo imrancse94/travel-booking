@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { success, failure } from '../utils/apiResponse.js';
-import { checkDatabaseConnection } from '../config/prisma.js';
+import { checkDatabaseConnection } from '../db/index.js';
 import { checkRedisConnection } from '../config/redis.js';
 
 export const router = Router();

@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL 16 is the system of record for the whole application. Access is exclusively through Prisma Client (`backend/src/config/prisma.js`); no other module opens a raw `pg` connection. The schema is defined in `backend/prisma/schema.prisma` (~40 models across 9 domain groups, summarized below).
+PostgreSQL 16 is the system of record for the whole application. Access is exclusively through the Drizzle client (`backend/src/db/index.js`); no other module opens a raw `pg` connection of its own. The schema is defined in `backend/src/db/schema.js` with its relations in `backend/src/db/relations.js` (~40 tables across 9 domain groups, summarized below).
 
 ## 1. Schema by domain group
 
@@ -71,8 +71,8 @@ This is enforced with **application-level locking + a re-check inside the transa
 
 This was a **deliberate simplicity/correctness tradeoff**, not an oversight:
 
-- A database-level `EXCLUDE USING gist (room_id WITH =, daterange(check_in, check_out) WITH &&)` constraint would be a stronger, schema-enforced guarantee (it protects even against a future code path that forgets to take the advisory lock), but it requires the `btree_gist` extension, a `daterange`/`tstzrange` column (Prisma does not model Postgres range types natively, so this would mean raw SQL for that column or an unmapped column with manual migration SQL), and careful handling of the booking `status` dimension (the exclusion needs to apply only to blocking statuses, which usually means a partial index/constraint or a trigger that only exercises the check for the relevant states).
-- The advisory-lock approach uses only integer arithmetic already provided by an unextended Postgres 16 image (`hashtextextended` is built in), needs no extension, and works entirely from application code inside a normal Prisma transaction — which keeps the whole booking write path in one place (`bookingService.js`) that is easy to read, test, and reason about.
+- A database-level `EXCLUDE USING gist (room_id WITH =, daterange(check_in, check_out) WITH &&)` constraint would be a stronger, schema-enforced guarantee (it protects even against a future code path that forgets to take the advisory lock), but it requires the `btree_gist` extension, a `daterange`/`tstzrange` column (which means hand-written migration SQL and a custom column type), and careful handling of the booking `status` dimension (the exclusion needs to apply only to blocking statuses, which usually means a partial index/constraint or a trigger that only exercises the check for the relevant states).
+- The advisory-lock approach uses only integer arithmetic already provided by an unextended Postgres 16 image (`hashtextextended` is built in), needs no extension, and works entirely from application code inside a normal database transaction — which keeps the whole booking write path in one place (`bookingService.js`) that is easy to read, test, and reason about.
 - The two approaches give the **same effective guarantee** as long as every write path to `booking_rooms` goes through `createBooking`'s transaction (it is currently the only insertion path), which is true today.
 
 This has been manually verified: firing two concurrent `POST /bookings` requests for the same room and overlapping dates reliably produces exactly one `201 Created` and one `409 Conflict` — the second request's transaction blocks on the advisory lock until the first commits, then re-checks overlap and sees the just-committed row.
@@ -90,17 +90,17 @@ Entities without a soft-delete column (e.g. `bookings`, `payments`, `invoices`, 
 
 ## 4. Money as NUMERIC/DECIMAL
 
-Every monetary column (`price`, `subtotal`, `total_amount`, `commission_amount`, etc.) is declared `@db.Decimal(12,2)` (or `Decimal(5,2)` for `commissions.percentage`), which Prisma maps to PostgreSQL `NUMERIC`. Application code never does money arithmetic with native JS numbers/floats: `backend/src/utils/money.js` re-exports Prisma's bundled `Decimal` (`decimal.js`) as `Money`, plus small helpers (`sum`, `roundCurrency`, `toDecimal`). All pricing and booking calculations (`pricingService.js`, `bookingService.js`) construct and operate on `Money` instances and only call `.toString()` when writing a value back into a Prisma `Decimal` field. This avoids floating-point rounding errors in prices, taxes, discounts, and commissions, per the project's explicit "never use floating point for money" rule.
+Every monetary column (`price`, `subtotal`, `total_amount`, `commission_amount`, etc.) is PostgreSQL `NUMERIC(12,2)` (or `NUMERIC(5,2)` for `commissions.percentage`), declared as `numeric({ precision, scale })` in the schema. The driver returns those columns as strings, never as JS floats. Application code never does money arithmetic with native JS numbers either: `backend/src/utils/money.js` exports `decimal.js` as `Money`, plus small helpers (`sum`, `roundCurrency`, `toDecimal`). All pricing and booking calculations (`pricingService.js`, `bookingService.js`) construct and operate on `Money` instances and only call `.toString()` when writing a value back into a numeric column. This avoids floating-point rounding errors in prices, taxes, discounts, and commissions, per the project's explicit "never use floating point for money" rule.
 
 ## 5. Migrations
 
-Migrations are managed with **Prisma Migrate**, not hand-written SQL:
+Migrations are managed with **drizzle-kit**, not hand-written SQL:
 
-- `backend/prisma/schema.prisma` is the single source of truth for the schema.
-- `npx prisma migrate dev --name <description>` (locally) generates a new migration under `backend/prisma/migrations/<timestamp>_<name>/migration.sql` by diffing the schema against the current migration history, and applies it to the connected database.
-- `npx prisma migrate deploy` (used in Docker, CI, and production) applies any pending migrations without generating new ones — the correct command for non-interactive environments.
-- A real initial migration, `backend/prisma/migrations/20260825064651_init`, has already been generated from the current schema and applied against a live, throwaway PostgreSQL instance — verified working, not hand-written or guessed. Every model in this document exists as a real table in that migration.
-- `migration_lock.toml` pins the migration engine to the `postgresql` provider so an accidental provider change is caught at generation time.
-- Rollback is handled by writing a new forward migration that reverses the change (Prisma does not support automatic down-migrations); for a schema this size, "roll forward" is the supported and recommended workflow.
+- `backend/src/db/schema.js` is the single source of truth for the schema. It is generated by `drizzle-kit pull` (`npm run db:pull`), which introspects the live database, so it reflects what is actually deployed rather than a hand translation.
+- `npx drizzle-kit generate --name <description>` (locally) writes a new migration under `backend/src/db/migrations/` by diffing the schema against the recorded snapshot in `migrations/meta/`.
+- `npm run db:migrate` (used in Docker, CI, and production) applies any pending migrations without generating new ones — the correct command for non-interactive environments. It runs `backend/src/db/migrate.js`, plain Node against `drizzle-orm`, so the production image needs no extra CLI.
+- The first migration, `0000_married_bucky.sql`, is the full schema as introspected from a live database. Every table in this document exists in it, and a fresh database (CI, a new environment) is built entirely from it.
+- A database that already has those tables is **baselined** instead: `migrate.js` records every journal entry as applied without executing it, so an environment created before the move to Drizzle adopts the ledger rather than failing on the first `CREATE TYPE`. Applied migrations are tracked in `drizzle.__drizzle_migrations`.
+- Rollback is handled by writing a new forward migration that reverses the change (there are no automatic down-migrations); for a schema this size, "roll forward" is the supported and recommended workflow.
 
-See `development.md` for the exact commands used to run and seed migrations locally, and `deployment.md` for how `prisma migrate deploy` is run safely in production before traffic is shifted to a new backend version.
+See `development.md` for the exact commands used to run and seed migrations locally, and `deployment.md` for how `npm run db:migrate` is run safely in production before traffic is shifted to a new backend version.

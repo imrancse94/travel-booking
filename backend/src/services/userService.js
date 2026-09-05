@@ -1,5 +1,5 @@
 import { bcryptHasher } from '../lib/BcryptHasher.js';
-import { ConflictError, NotFoundError } from '../utils/errors.js';
+import { ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
 import * as userRepository from '../repositories/userRepository.js';
 import { recordAudit } from './auditService.js';
 
@@ -9,6 +9,12 @@ function sanitize(user) {
   return safe;
 }
 
+/**
+ * `query.excludeUserId` leaves the caller's own account out of the list --
+ * the users admin section manages other accounts, not the one you're signed
+ * in as (that's your own profile, elsewhere), and it also means there's
+ * nothing to accidentally delete-your-own-account from this screen.
+ */
 export async function listUsers(query) {
   const { items, total } = await userRepository.list(query);
   return { items: items.map(sanitize), total };
@@ -48,6 +54,13 @@ export async function updateUser(id, { roleIds, ...data }, actorId) {
 }
 
 export async function deleteUser(id, actorId) {
+  // Checked before the lookup so the answer does not depend on the account
+  // still existing: deleting yourself would revoke your own access mid-session
+  // and, for the last Super Admin, lock everyone out of the admin area.
+  if (id === actorId) {
+    throw new ValidationError('You cannot delete your own account');
+  }
+
   const existing = await userRepository.findById(id);
   if (!existing) throw new NotFoundError('User not found');
 

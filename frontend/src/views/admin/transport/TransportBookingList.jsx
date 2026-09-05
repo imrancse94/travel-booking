@@ -9,6 +9,7 @@ import {
   Input,
   Modal,
   Pagination,
+  PlusCircleIcon,
   SearchFilterBar,
   SectionTabs,
   Select,
@@ -20,6 +21,7 @@ import * as transportService from '../../../services/transportService.js';
 import { TRANSPORT_BOOKING_STATUS_OPTIONS } from '../../../constants/options.js';
 import { formatCurrency, formatDate } from '../../../utils/format.js';
 import { TRANSPORT_SECTION_TABS } from './transportNav.js';
+import { MAX_PAGE_SIZE } from '../../../constants/pagination.js';
 
 const EMPTY_FORM = { pickup: '', dropoff: '', date: '', time: '', vehicleId: '', driverId: '', price: '' };
 
@@ -39,8 +41,14 @@ export function TransportBookingList() {
   const list = useResourceList({ fetcher: transportService.listBookings, initialFilters: { status: '' } });
 
   useEffect(() => {
-    transportService.listVehicles({ limit: 200 }).then((res) => setVehicles(res.data || []));
-    transportService.listDrivers({ limit: 200 }).then((res) => setDrivers(res.data || []));
+    transportService
+      .listVehicles({ limit: MAX_PAGE_SIZE })
+      .then((res) => setVehicles(res.data || []))
+      .catch(() => setVehicles([]));
+    transportService
+      .listDrivers({ limit: MAX_PAGE_SIZE })
+      .then((res) => setDrivers(res.data || []))
+      .catch(() => setDrivers([]));
   }, []);
 
   async function handleSave(e) {
@@ -85,7 +93,7 @@ export function TransportBookingList() {
       ? [
           {
             key: 'actions',
-            header: '',
+            header: 'Action',
             render: (row) => (
               <div className="inline-actions">
                 {row.status === 'pending' && (
@@ -114,7 +122,13 @@ export function TransportBookingList() {
           <h1 className="page-title">Transport Bookings</h1>
           <p className="page-subtitle">Pickup/drop-off bookings for customers and tours.</p>
         </div>
-        <div className="page-actions">{canCreate && <Button onClick={() => setModalOpen(true)}>+ New Transport Booking</Button>}</div>
+        <div className="page-actions">
+          {canCreate && (
+            <Button variant="success" onClick={() => setModalOpen(true)} icon={<PlusCircleIcon />}>
+              New Transport Booking
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>

@@ -3,7 +3,7 @@ import { paginated } from '../utils/apiResponse.js';
 import { NotFoundError } from '../utils/errors.js';
 import { parsePagination } from '../utils/pagination.js';
 import { toCsv } from '../utils/csvExporter.js';
-import { prisma } from '../config/prisma.js';
+import { listAuditLogs as queryAuditLogs } from '../services/auditService.js';
 import * as reportService from '../services/reportService.js';
 
 function extractFilters(query) {
@@ -46,30 +46,7 @@ export const listAuditLogs = asyncHandler(async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const { entity, entityId, userId, dateFrom, dateTo } = req.query;
 
-  const where = {
-    ...(entity ? { entity } : {}),
-    ...(entityId ? { entityId } : {}),
-    ...(userId ? { userId } : {}),
-    ...(dateFrom || dateTo
-      ? {
-          createdAt: {
-            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-            ...(dateTo ? { lte: new Date(dateTo) } : {}),
-          },
-        }
-      : {}),
-  };
-
-  const [items, total] = await Promise.all([
-    prisma.auditLog.findMany({
-      where,
-      include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-    }),
-    prisma.auditLog.count({ where }),
-  ]);
+  const { items, total } = await queryAuditLogs({ entity, entityId, userId, dateFrom, dateTo, limit, skip });
 
   return paginated(res, { items, page, limit, total });
 });

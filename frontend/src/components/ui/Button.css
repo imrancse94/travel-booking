@@ -36,6 +36,14 @@
   background: var(--color-bg);
 }
 
+.btn--success {
+  background: var(--color-success);
+  color: #fff;
+}
+.btn--success:hover:not(:disabled) {
+  background: var(--color-success-hover);
+}
+
 .btn--danger {
   background: var(--color-danger);
   color: #fff;
@@ -50,6 +58,12 @@
 }
 .btn--ghost:hover:not(:disabled) {
   background: var(--color-bg);
+}
+
+.btn__icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .btn__spinner {

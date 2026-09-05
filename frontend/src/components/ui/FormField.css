@@ -43,6 +43,14 @@
   cursor: pointer;
 }
 
+.form-field__control:disabled {
+  background: #d2d2d2;
+  border-color: #d2d2d2;
+  color: #4b5563;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
 textarea.form-field__control {
   resize: vertical;
   min-height: 90px;
@@ -57,3 +65,4 @@ textarea.form-field__control {
 .form-field__message--error {
   color: var(--color-danger);
 }
+

@@ -1,0 +1,112 @@
+.file-upload {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.file-upload--dragging {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.file-upload--error {
+  border-color: var(--color-danger);
+}
+
+.file-upload--disabled {
+  opacity: 0.6;
+}
+
+.file-upload__input {
+  display: none;
+}
+
+/* Empty state: the whole area is the click target. */
+.file-upload__dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-6) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.file-upload__dropzone:disabled {
+  cursor: not-allowed;
+}
+
+.file-upload__dropzone:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.file-upload__prompt strong {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Filled state: preview plus text actions. */
+.file-upload__filled {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3);
+}
+
+.file-upload__preview {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  flex-shrink: 0;
+}
+
+/* Identity marks (agency logo, favicon) match the circular crop BrandMark
+   renders them with everywhere else -- cover, not contain, so it is a filled
+   circle rather than a square logo floating inside one. */
+.file-upload__preview--circle {
+  object-fit: cover;
+  border-radius: 50%;
+  border: 3px solid var(--color-border);
+}
+
+.file-upload__filled-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.file-upload__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.file-upload__link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.file-upload__link:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.file-upload__link--danger {
+  color: var(--color-danger);
+}

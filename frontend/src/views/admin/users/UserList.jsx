@@ -9,10 +9,13 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EditIcon,
   Pagination,
+  PlusCircleIcon,
   SearchFilterBar,
   StatusBadge,
   Table,
+  TrashIcon,
   useToast,
 } from '../../../components/ui/index.js';
 import * as userService from '../../../services/userService.js';
@@ -27,6 +30,9 @@ export function UserList() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // The backend leaves the caller's own account out of this list entirely
+  // (see userController.list's excludeUserId) -- it manages itself elsewhere
+  // (its own profile), not through this screen.
   const list = useResourceList({ fetcher: userService.list });
 
   const columns = [
@@ -50,16 +56,16 @@ export function UserList() {
     { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
     {
       key: 'actions',
-      header: '',
+      header: 'Action',
       render: (row) => (
         <div className="inline-actions">
           {canUpdate && (
-            <Button variant="ghost" onClick={() => router.push(`/admin/users/${row.id}/edit`)}>
+            <Button icon={<EditIcon />} variant="primary" onClick={() => router.push(`/admin/users/${row.id}/edit`)}>
               Edit
             </Button>
           )}
           {canDelete && (
-            <Button variant="ghost" onClick={() => setPendingDelete(row)}>
+            <Button icon={<TrashIcon />} variant="danger" onClick={() => setPendingDelete(row)}>
               Delete
             </Button>
           )}
@@ -92,8 +98,8 @@ export function UserList() {
         </div>
         <div className="page-actions">
           {canCreate && (
-            <Button as={Link} href="/admin/users/new">
-              + New User
+            <Button variant="success" as={Link} href="/admin/users/new" icon={<PlusCircleIcon />}>
+              New User
             </Button>
           )}
         </div>

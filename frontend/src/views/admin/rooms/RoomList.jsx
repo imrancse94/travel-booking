@@ -9,18 +9,22 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EditIcon,
   Pagination,
+  PlusCircleIcon,
   SearchFilterBar,
   SectionTabs,
   Select,
   StatusBadge,
   Table,
+  TrashIcon,
   useToast,
 } from '../../../components/ui/index.js';
 import * as roomService from '../../../services/roomService.js';
 import * as roomTypeService from '../../../services/roomTypeService.js';
 import { ROOM_STATUS_OPTIONS } from '../../../constants/options.js';
 import { ROOM_SECTION_TABS } from './roomsNav.js';
+import { MAX_PAGE_SIZE } from '../../../constants/pagination.js';
 
 /** Individual rooms list (room number, floor, status) scoped to a room type. */
 export function RoomList() {
@@ -38,7 +42,7 @@ export function RoomList() {
 
   useEffect(() => {
     roomTypeService
-      .list({ limit: 200 })
+      .list({ limit: MAX_PAGE_SIZE })
       .then((res) => setRoomTypes(res.data || []))
       .catch(() => setRoomTypes([]));
   }, []);
@@ -51,16 +55,16 @@ export function RoomList() {
     { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
     {
       key: 'actions',
-      header: '',
+      header: 'Action',
       render: (row) => (
         <div className="inline-actions">
           {canUpdate && (
-            <Button variant="ghost" onClick={() => router.push(`/admin/rooms/rooms/${row.id}/edit`)}>
+            <Button icon={<EditIcon />} variant="primary" onClick={() => router.push(`/admin/rooms/rooms/${row.id}/edit`)}>
               Edit
             </Button>
           )}
           {canDelete && (
-            <Button variant="ghost" onClick={() => setPendingDelete(row)}>
+            <Button icon={<TrashIcon />} variant="danger" onClick={() => setPendingDelete(row)}>
               Delete
             </Button>
           )}
@@ -95,8 +99,8 @@ export function RoomList() {
         </div>
         <div className="page-actions">
           {canCreate && (
-            <Button as={Link} href="/admin/rooms/rooms/new">
-              + New Room
+            <Button variant="success" as={Link} href="/admin/rooms/rooms/new" icon={<PlusCircleIcon />}>
+              New Room
             </Button>
           )}
         </div>

@@ -50,6 +50,15 @@ export async function listRatesForRoomType(roomTypeId, query) {
   return ratePlanRepository.listRoomRatesForRoomType(roomTypeId, query);
 }
 
+/** The un-nested /rate-plans/room-rates listing: every room type when `roomTypeId` is omitted. */
+export async function listRoomRates({ roomTypeId, ...query }) {
+  if (roomTypeId) {
+    const roomType = await roomTypeRepository.findByIdRaw(roomTypeId);
+    if (!roomType) throw new NotFoundError('Room type not found');
+  }
+  return ratePlanRepository.listRoomRates({ roomTypeId, ...query });
+}
+
 export async function createRoomRate(roomTypeId, data, actorId) {
   const roomType = await roomTypeRepository.findByIdRaw(roomTypeId);
   if (!roomType) throw new NotFoundError('Room type not found');

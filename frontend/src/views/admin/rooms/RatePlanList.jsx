@@ -5,11 +5,14 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EditIcon,
   Input,
   Modal,
+  PlusCircleIcon,
   SectionTabs,
   Select,
   Table,
+  TrashIcon,
   useToast,
 } from '../../../components/ui/index.js';
 import { usePermission } from '../../../hooks/usePermission.js';
@@ -19,6 +22,7 @@ import { RATE_PLAN_TYPE_OPTIONS } from '../../../constants/options.js';
 import { formatCurrency, formatDate } from '../../../utils/format.js';
 import { ROOM_SECTION_TABS } from './roomsNav.js';
 import { RoomRateForm } from './RoomRateForm.jsx';
+import { MAX_PAGE_SIZE } from '../../../constants/pagination.js';
 
 const EMPTY_PLAN = { name: '', type: 'room_only', description: '' };
 
@@ -50,9 +54,9 @@ export function RatePlanList() {
   function loadAll() {
     setLoading(true);
     return Promise.all([
-      ratePlanService.list({ limit: 100 }),
-      roomTypeService.list({ limit: 200 }),
-      ratePlanService.listRoomRates(roomTypeFilter ? { roomTypeId: roomTypeFilter, limit: 100 } : { limit: 100 }),
+      ratePlanService.list({ limit: MAX_PAGE_SIZE }),
+      roomTypeService.list({ limit: MAX_PAGE_SIZE }),
+      ratePlanService.listRoomRates(roomTypeFilter ? { roomTypeId: roomTypeFilter, limit: MAX_PAGE_SIZE } : { limit: MAX_PAGE_SIZE }),
     ])
       .then(([plansRes, roomTypesRes, ratesRes]) => {
         setRatePlans(plansRes.data || []);
@@ -132,9 +136,9 @@ export function RatePlanList() {
       ? [
           {
             key: 'actions',
-            header: '',
+            header: 'Action',
             render: (p) => (
-              <Button variant="ghost" onClick={() => handleDeletePlan(p)}>
+              <Button icon={<TrashIcon />} variant="danger" onClick={() => handleDeletePlan(p)}>
                 Delete
               </Button>
             ),
@@ -155,11 +159,12 @@ export function RatePlanList() {
       ? [
           {
             key: 'actions',
-            header: '',
+            header: 'Action',
             render: (r) => (
               <div className="inline-actions">
                 <Button
-                  variant="ghost"
+                  icon={<EditIcon />}
+                  variant="primary"
                   onClick={() => {
                     setEditingRate(r);
                     setRateModalOpen(true);
@@ -167,7 +172,7 @@ export function RatePlanList() {
                 >
                   Edit
                 </Button>
-                <Button variant="ghost" onClick={() => setPendingDeleteRate(r)}>
+                <Button icon={<TrashIcon />} variant="danger" onClick={() => setPendingDeleteRate(r)}>
                   Delete
                 </Button>
               </div>
@@ -187,7 +192,11 @@ export function RatePlanList() {
           <p className="page-subtitle">Room Only, Breakfast Included and other rate plans, plus dated room rates.</p>
         </div>
         <div className="page-actions">
-          {canManage && <Button onClick={() => setPlanModalOpen(true)}>+ New Rate Plan</Button>}
+          {canManage && (
+            <Button variant="success" onClick={() => setPlanModalOpen(true)} icon={<PlusCircleIcon />}>
+              New Rate Plan
+            </Button>
+          )}
         </div>
       </div>
 
@@ -205,12 +214,14 @@ export function RatePlanList() {
           />
           {canManage && (
             <Button
+              variant="success"
+              icon={<PlusCircleIcon />}
               onClick={() => {
                 setEditingRate(null);
                 setRateModalOpen(true);
               }}
             >
-              + Add Rate
+              Add Rate
             </Button>
           )}
         </div>

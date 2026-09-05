@@ -12,7 +12,7 @@
 }
 
 .ui-table th {
-  text-align: left;
+  text-align: center;
   padding: var(--space-3) var(--space-4);
   background: var(--color-bg);
   color: var(--color-text-muted);
@@ -44,6 +44,7 @@
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
+  text-align: center;
 }
 
 .ui-table tbody tr:last-child td {
@@ -55,6 +56,16 @@
 }
 .ui-table__row--clickable:hover {
   background: var(--color-bg);
+}
+
+/* Every list view names its row-actions column 'actions' by convention, so
+   Table.jsx tags its cell with this class without each caller opting in. */
+.ui-table__td--actions {
+  text-align: center;
+}
+
+.ui-table__td--actions .inline-actions {
+  justify-content: center;
 }
 
 .ui-table__empty {

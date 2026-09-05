@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Button, Card, Input, Select, Textarea, useToast } from '../../components/ui/index.js';
+import { Button, Card, Input, PlusCircleIcon, Select, Textarea, TrashIcon, useToast } from '../../components/ui/index.js';
 import * as bookingService from '../../services/bookingService.js';
 import * as paymentService from '../../services/paymentService.js';
 import * as customerService from '../../services/customerService.js';
@@ -313,6 +313,7 @@ export function Checkout() {
                   <h4 className="guest-card__title">{guest.isPrimary ? 'Primary Guest' : `Guest ${index + 1}`}</h4>
                   {!guest.isPrimary && (
                     <Button
+                      icon={<TrashIcon />}
                       variant="danger"
                       className="day-editor__remove"
                       onClick={() => removeGuest(index)}
@@ -365,8 +366,8 @@ export function Checkout() {
                 </div>
               ))}
               <div className="guest-add">
-                <Button type="button" variant="secondary" onClick={addGuest}>
-                  <span aria-hidden="true">+</span> Add Guest
+                <Button type="button" variant="success" icon={<PlusCircleIcon />} onClick={addGuest}>
+                  Add Guest
                 </Button>
               </div>
             </div>

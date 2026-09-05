@@ -5,7 +5,7 @@ import * as userService from '../services/userService.js';
 
 export const list = asyncHandler(async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
-  const { items, total } = await userService.listUsers({ ...req.query, page, limit, skip });
+  const { items, total } = await userService.listUsers({ ...req.query, page, limit, skip, excludeUserId: req.user.id });
   return paginated(res, { items, page, limit, total });
 });
 

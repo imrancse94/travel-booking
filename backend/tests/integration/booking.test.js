@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import { createApp } from '../../src/app.js';
-import { prisma } from '../../src/config/prisma.js';
+import { eq } from 'drizzle-orm';
+import { db, disconnectDb } from '../../src/db/index.js';
+import { bookingRooms, rooms } from '../../src/db/schema.js';
 import {
   ensureRolesAndPermissions,
   createAdmin,
@@ -36,7 +38,7 @@ describe('booking lifecycle', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectDb();
   });
 
   it('search availability returns a server-calculated price, not something the client can influence', async () => {
@@ -208,8 +210,8 @@ describe('booking lifecycle', () => {
     expect(checkIn.status).toBe(200);
     expect(checkIn.body.data.status).toBe('checked_in');
 
-    const bookingRoom = await prisma.bookingRoom.findFirst({ where: { bookingId } });
-    const room = await prisma.room.findUnique({ where: { id: bookingRoom.roomId } });
+    const [bookingRoom] = await db.select().from(bookingRooms).where(eq(bookingRooms.bookingId, bookingId)).limit(1);
+    const [room] = await db.select().from(rooms).where(eq(rooms.id, bookingRoom.roomId)).limit(1);
     expect(room.status).toBe('occupied');
 
     const checkOut = await request(app).post(`/api/v1/bookings/${bookingId}/check-out`).set('Authorization', `Bearer ${adminToken}`);

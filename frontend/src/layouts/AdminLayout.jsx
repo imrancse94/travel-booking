@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { Breadcrumbs } from '../components/ui/index.js';
+import { BrandMark, Breadcrumbs } from '../components/ui/index.js';
+import { useBranding } from '../contexts/BrandingContext.jsx';
 import { ADMIN_NAV_ITEMS, getBreadcrumbTrail } from '../constants/navigation.js';
 import '../styles/admin-pages.css';
 import './AdminLayout.css';
@@ -17,6 +18,7 @@ import './AdminLayout.css';
  */
 export function AdminLayout({ children }) {
   const { user, hasPermission, logout } = useAuth();
+  const { branding } = useBranding();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -37,8 +39,7 @@ export function AdminLayout({ children }) {
     <div className="admin-layout">
       <aside className={`admin-layout__sidebar ${sidebarOpen ? 'admin-layout__sidebar--open' : ''}`}>
         <div className="admin-layout__brand">
-          <span className="admin-layout__brand-mark">TA</span>
-          <span className="admin-layout__brand-name">Travel Admin</span>
+          <BrandMark />
         </div>
         <nav className="admin-layout__nav">
           {visibleNavItems.map((item) => (
@@ -76,7 +77,7 @@ export function AdminLayout({ children }) {
             <span />
           </button>
 
-          <div className="admin-layout__topbar-agency">Global Travel Agency</div>
+          <div className="admin-layout__topbar-agency">{branding.agency_name}</div>
 
           <div className="admin-layout__topbar-user">
             <span className="admin-layout__user-name">{userLabel}</span>

@@ -5,14 +5,17 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EditIcon,
   Input,
   Modal,
   Pagination,
+  PlusCircleIcon,
   SearchFilterBar,
   Select,
   StatusBadge,
   Table,
   Textarea,
+  TrashIcon,
   useToast,
 } from '../../../components/ui/index.js';
 import { useResourceList } from '../../../hooks/useResourceList.js';
@@ -154,16 +157,16 @@ export function ServiceList() {
       ? [
           {
             key: 'actions',
-            header: '',
+            header: 'Action',
             render: (row) => (
               <div className="inline-actions">
                 {canUpdate && (
-                  <Button variant="ghost" onClick={() => openEdit(row)}>
+                  <Button icon={<EditIcon />} variant="primary" onClick={() => openEdit(row)}>
                     Edit
                   </Button>
                 )}
                 {canDelete && (
-                  <Button variant="ghost" onClick={() => setPendingDelete(row)}>
+                  <Button icon={<TrashIcon />} variant="danger" onClick={() => setPendingDelete(row)}>
                     Delete
                   </Button>
                 )}
@@ -184,7 +187,7 @@ export function ServiceList() {
             more.
           </p>
         </div>
-        <div className="page-actions">{canCreate && <Button onClick={openCreate}>+ New Service</Button>}</div>
+        <div className="page-actions">{canCreate && <Button variant="success" onClick={openCreate} icon={<PlusCircleIcon />}>New Service</Button>}</div>
       </div>
 
       <Card>

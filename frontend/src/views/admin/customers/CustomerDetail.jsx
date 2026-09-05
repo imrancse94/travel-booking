@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { Card, Loader, StatusBadge, Table } from '../../../components/ui/index.js';
+import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeftIcon, Button, Card, Loader, StatusBadge, Table } from '../../../components/ui/index.js';
 import * as customerService from '../../../services/customerService.js';
 import { formatCurrency, formatDate } from '../../../utils/format.js';
 
@@ -27,6 +27,7 @@ const PAYMENT_COLUMNS = [
 /** Customer profile: contact/passport info plus booking and payment history. */
 export function CustomerDetail() {
   const { id } = useParams();
+  const router = useRouter();
   const [customer, setCustomer] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -69,6 +70,11 @@ export function CustomerDetail() {
         <div>
           <h1 className="page-title">{customer.firstName} {customer.lastName}</h1>
           <p className="page-subtitle">{customer.email}</p>
+        </div>
+        <div className="page-actions">
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/customers')}>
+            Back
+          </Button>
         </div>
       </div>
 

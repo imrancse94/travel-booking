@@ -19,8 +19,6 @@ export const listRatePlansQuerySchema = z.object({
 
 export const idParamSchema = z.object({ id: z.string().uuid() });
 
-export const rateIdParamSchema = z.object({ rateId: z.string().uuid() });
-
 export const createRoomRateSchema = z.object({
   ratePlanId: z.string().uuid(),
   startDate: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid start date'),
@@ -30,6 +28,18 @@ export const createRoomRateSchema = z.object({
   extraChildPrice: z.number().min(0).optional(),
   currency: z.string().length(3).optional(),
   priority: z.number().int().optional(),
+});
+
+// Same shape, but for the un-nested /rate-plans/room-rates endpoint, which
+// (unlike /room-types/:id/rates) has no room type in the URL to take it from.
+export const createGeneralRoomRateSchema = createRoomRateSchema.extend({
+  roomTypeId: z.string().uuid(),
+});
+
+export const listRoomRatesQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  roomTypeId: z.string().uuid().optional(),
 });
 
 export const updateRoomRateSchema = z.object({

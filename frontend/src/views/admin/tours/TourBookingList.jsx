@@ -56,7 +56,7 @@ export function TourBookingList() {
       ? [
           {
             key: 'actions',
-            header: '',
+            header: 'Action',
             render: (row) => (
               <div className="inline-actions">
                 {row.status === 'pending' && (

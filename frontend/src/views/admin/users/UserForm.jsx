@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Button, Card, Input, Loader, Select, useToast } from '../../../components/ui/index.js';
+import { ArrowLeftIcon, Button, Card, Input, Loader, Select, useToast } from '../../../components/ui/index.js';
 import * as userService from '../../../services/userService.js';
 import * as roleService from '../../../services/roleService.js';
 import { ENTITY_STATUS_OPTIONS } from '../../../constants/options.js';
@@ -111,6 +111,11 @@ export function UserForm() {
     <div>
       <div className="page-header">
         <h1 className="page-title">{isEdit ? 'Edit User' : 'New User'}</h1>
+        <div className="page-actions">
+          <Button icon={<ArrowLeftIcon />} variant="primary" onClick={() => router.push('/admin/users')}>
+            Back
+          </Button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>

@@ -76,7 +76,7 @@ deploying:
 
 | Job | Runs on | What it proves |
 |---|---|---|
-| `backend-test` | push/PR to `main` | ESLint, then Jest/Supertest against throwaway Postgres and Redis service containers, after `prisma generate` and `prisma migrate deploy`. |
+| `backend-test` | push/PR to `main` | ESLint, then Jest/Supertest against throwaway Postgres and Redis service containers, after `npm run db:migrate`. |
 | `frontend-test` | push/PR to `main` | ESLint, then Vitest over the Next.js app. |
 | `build` | push to `main` only | Builds both `production` image stages and pushes them to GHCR. Needs both test jobs green. |
 | `check-secrets` | push to `main` only | Confirms the EC2 secrets exist; a missing one warns and skips the deploy rather than failing the run. |
@@ -139,17 +139,18 @@ that environment can gate everything that touches production)
    `:latest` has moved server-side.
 9. **Start Postgres and Redis first** and wait for `pg_isready`, so the
    migration has a database to talk to.
-10. **Run `npx prisma migrate deploy` in a one-off `run --rm --no-deps`
-    container on the new image** — deliberately *not* `exec` into the running
-    backend, which may still be serving the previous release. The schema
-    belongs to the code being deployed and must land before any container
-    running that code serves traffic. Migrations are additive/backward-compatible
-    by convention (see `database.md` section 5), which keeps the outgoing
-    containers valid during the restart.
+10. **Run `npm run db:migrate` in a one-off `run --rm --no-deps` container on
+    the new image** — deliberately *not* `exec` into the running backend, which
+    may still be serving the previous release. The schema belongs to the code
+    being deployed and must land before any container running that code serves
+    traffic. Migrations are additive/backward-compatible by convention (see
+    `database.md` section 5), which keeps the outgoing containers valid during
+    the restart.
 
-    This is why the `prisma` CLI is a runtime `dependency` rather than a
-    `devDependency`: the production image installs with `npm ci --omit=dev`, so
-    a dev-only CLI would not be present to run the migration.
+    The runner is `src/db/migrate.js`, plain Node against `drizzle-orm`, which
+    is already a runtime dependency. Nothing extra has to survive the
+    production image's `npm ci --omit=dev`, and the migration SQL ships inside
+    `src/db/migrations/`.
 11. **`docker compose up -d --remove-orphans`** to roll both services onto the
     new images, then `docker image prune -f` — without that, a small instance
     fills its disk after a few dozen `:latest` retags.

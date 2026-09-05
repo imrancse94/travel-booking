@@ -8,7 +8,8 @@ import {
   updateRatePlanSchema,
   listRatePlansQuerySchema,
   idParamSchema,
-  rateIdParamSchema,
+  createGeneralRoomRateSchema,
+  listRoomRatesQuerySchema,
   updateRoomRateSchema,
 } from '../validators/ratePlan.validators.js';
 
@@ -36,7 +37,30 @@ router.post(
 
 /**
  * @openapi
- * /rate-plans/rates/{rateId}:
+ * /rate-plans/room-rates:
+ *   get:
+ *     summary: List room rates, optionally scoped to one room type via ?roomTypeId
+ *     tags: [Rate Plans]
+ *   post:
+ *     summary: Create a room rate (roomTypeId is part of the body here, unlike the nested /room-types/{id}/rates route)
+ *     tags: [Rate Plans]
+ */
+router.get(
+  '/room-rates',
+  requirePermission('rate_plans.view'),
+  validate({ query: listRoomRatesQuerySchema }),
+  ratePlanController.listRoomRates
+);
+router.post(
+  '/room-rates',
+  requirePermission('rate_plans.create'),
+  validate({ body: createGeneralRoomRateSchema }),
+  ratePlanController.createRoomRate
+);
+
+/**
+ * @openapi
+ * /rate-plans/room-rates/{id}:
  *   get:
  *     summary: Get a single room rate
  *     tags: [Rate Plans]
@@ -48,21 +72,21 @@ router.post(
  *     tags: [Rate Plans]
  */
 router.get(
-  '/rates/:rateId',
+  '/room-rates/:id',
   requirePermission('rate_plans.view'),
-  validate({ params: rateIdParamSchema }),
+  validate({ params: idParamSchema }),
   ratePlanController.getRoomRate
 );
 router.put(
-  '/rates/:rateId',
+  '/room-rates/:id',
   requirePermission('rate_plans.update'),
-  validate({ params: rateIdParamSchema, body: updateRoomRateSchema }),
+  validate({ params: idParamSchema, body: updateRoomRateSchema }),
   ratePlanController.updateRoomRate
 );
 router.delete(
-  '/rates/:rateId',
+  '/room-rates/:id',
   requirePermission('rate_plans.delete'),
-  validate({ params: rateIdParamSchema }),
+  validate({ params: idParamSchema }),
   ratePlanController.deleteRoomRate
 );
 

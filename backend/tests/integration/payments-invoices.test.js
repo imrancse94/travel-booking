@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import { createApp } from '../../src/app.js';
-import { prisma } from '../../src/config/prisma.js';
+import { disconnectDb } from '../../src/db/index.js';
 import {
   ensureRolesAndPermissions,
   createAdmin,
@@ -49,7 +49,7 @@ describe('payments and invoices', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectDb();
   });
 
   it('lets a customer pay toward their own booking with the mock gateway', async () => {
@@ -139,6 +139,11 @@ describe('payments and invoices', () => {
     const ownPdf = await request(app).get(`/api/v1/invoices/${invoiceId}/pdf`).set('Authorization', `Bearer ${customerAToken}`);
     expect(ownPdf.status).toBe(200);
     expect(ownPdf.headers['content-type']).toBe('application/pdf');
+
+    // The stored link has to work from outside the browser tab that generated
+    // it (an email, a different API consumer), so it must be absolute.
+    const stored = await request(app).get(`/api/v1/invoices/${invoiceId}`).set('Authorization', `Bearer ${customerAToken}`);
+    expect(stored.body.data.pdfUrl).toMatch(/^https?:\/\//);
   });
 
   it('a customer cannot generate invoices directly (no invoices.create permission)', async () => {

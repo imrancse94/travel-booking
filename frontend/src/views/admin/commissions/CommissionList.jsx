@@ -19,6 +19,7 @@ import * as commissionService from '../../../services/commissionService.js';
 import * as userService from '../../../services/userService.js';
 import { COMMISSION_STATUS_OPTIONS } from '../../../constants/options.js';
 import { formatCurrency, formatDate } from '../../../utils/format.js';
+import { MAX_PAGE_SIZE } from '../../../constants/pagination.js';
 
 /** Commissions list: filter by agent/status, with a mark-as-paid action. */
 export function CommissionList() {
@@ -32,7 +33,7 @@ export function CommissionList() {
 
   useEffect(() => {
     userService
-      .list({ limit: 200 })
+      .list({ limit: MAX_PAGE_SIZE })
       .then((res) => setAgents(res.data || []))
       .catch(() => setAgents([]));
   }, []);
@@ -66,7 +67,7 @@ export function CommissionList() {
       ? [
           {
             key: 'actions',
-            header: '',
+            header: 'Action',
             render: (row) =>
               row.status !== 'paid' ? (
                 <Button variant="ghost" onClick={() => setPendingMarkPaid(row)}>

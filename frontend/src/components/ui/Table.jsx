@@ -4,6 +4,8 @@ import './Table.css';
 
 /**
  * Generic data table. `columns`: [{ key, header, render(row), sortable, width }].
+ * `rowKey(row, index)` defaults to `row.id`; pass it explicitly for rows that
+ * carry no identity of their own (report aggregates, for instance).
  * Sorting is click-driven via `sort` ({key,dir}) + `onSortChange`; loading shows
  * skeleton rows; an empty `rows` array shows `emptyMessage`.
  */
@@ -34,7 +36,9 @@ export function Table({
               <th
                 key={col.key}
                 style={col.width ? { width: col.width } : undefined}
-                className={col.sortable ? 'ui-table__th--sortable' : ''}
+                className={[col.sortable ? 'ui-table__th--sortable' : '', col.key === 'actions' ? 'ui-table__td--actions' : '']
+                  .filter(Boolean)
+                  .join(' ')}
                 onClick={() => handleSort(col)}
               >
                 <span className="ui-table__th-content">
@@ -70,14 +74,16 @@ export function Table({
           )}
 
           {!loading &&
-            rows.map((row) => (
+            rows.map((row, i) => (
               <tr
-                key={rowKey(row)}
+                key={rowKey(row, i)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={onRowClick ? 'ui-table__row--clickable' : ''}
               >
                 {columns.map((col) => (
-                  <td key={col.key}>{col.render ? col.render(row) : row[col.key]}</td>
+                  <td key={col.key} className={col.key === 'actions' ? 'ui-table__td--actions' : ''}>
+                    {col.render ? col.render(row) : row[col.key]}
+                  </td>
                 ))}
               </tr>
             ))}

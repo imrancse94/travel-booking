@@ -4,7 +4,7 @@ A production-oriented hotel booking and travel agency management platform: hotel
 
 ## Tech stack
 
-**Backend** — Node.js 20 LTS, Express, plain JavaScript (ES Modules, no TypeScript), Prisma ORM against PostgreSQL, Redis, JWT auth, Zod validation, Swagger/OpenAPI docs.
+**Backend** — Node.js 20 LTS, Express, plain JavaScript (ES Modules, no TypeScript), Drizzle ORM against PostgreSQL, Redis, JWT auth, Zod validation, Swagger/OpenAPI docs.
 
 **Frontend** — Next.js 16 (App Router), React 19, plain JavaScript (no TypeScript), Axios. Session state is resolved on the server from an httpOnly cookie and passed into a React context — there is no client-side store.
 
@@ -18,10 +18,11 @@ See [`documentation/architecture.md`](documentation/architecture.md) for the ful
 /
 ├── backend/                # Express API — see documentation/architecture.md
 │   ├── src/
-│   │   ├── config/         # env, prisma client, redis client, logger, swagger, permissions
+│   │   ├── config/         # env, redis client, logger, swagger, permissions
+│   │   ├── db/             # Drizzle client, schema.js, relations.js, migrations/
 │   │   ├── controllers/    # HTTP <-> service glue
 │   │   ├── middleware/     # auth, rbac, validate, rateLimiter, requestLogger, errorHandler
-│   │   ├── repositories/   # data-access modules on top of Prisma
+│   │   ├── repositories/   # data-access modules on top of Drizzle
 │   │   ├── routes/         # one *.routes.js per resource
 │   │   ├── services/       # business logic and transactions
 │   │   ├── validators/     # zod schemas
@@ -32,7 +33,6 @@ See [`documentation/architecture.md`](documentation/architecture.md) for the ful
 │   │   ├── lib/            # wrapper classes around every external npm library
 │   │   ├── app.js
 │   │   └── server.js
-│   ├── prisma/             # schema.prisma + migrations/
 │   ├── seeds/               # database seed script
 │   ├── tests/                # unit/ and integration/
 │   ├── Dockerfile
@@ -91,7 +91,7 @@ docker compose up --build
 docker compose exec backend npm run seed
 ```
 
-Database migrations run automatically when the backend container starts (`npx prisma migrate deploy`, part of its Compose start command).
+Database migrations run automatically when the backend container starts (`npm run db:migrate`, part of its Compose start command).
 
 ### Common commands
 
@@ -110,7 +110,7 @@ Database migrations run automatically when the backend container starts (`npx pr
 | `make build` | build the production Docker images |
 | `make clean` | remove containers **and** database volumes |
 
-Full setup, testing, linting, pgAdmin and Prisma Studio instructions are in [`documentation/development.md`](documentation/development.md).
+Full setup, testing, linting, pgAdmin and Drizzle Studio instructions are in [`documentation/development.md`](documentation/development.md).
 
 ## Default URLs
 

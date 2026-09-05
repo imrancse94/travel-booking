@@ -1,7 +1,8 @@
 'use client';
 
 import { SessionProvider } from '../contexts/AuthContext.jsx';
-import { ToastProvider } from '../components/ui/index.js';
+import { BrandingProvider } from '../contexts/BrandingContext.jsx';
+import { FaviconSync, ToastProvider } from '../components/ui/index.js';
 
 /**
  * The only client-side providers the app needs.
@@ -11,10 +12,13 @@ import { ToastProvider } from '../components/ui/index.js';
  * passes down as `session`. Toasts stay client-side because they are a
  * browser-only, ephemeral UI queue.
  */
-export function Providers({ session, children }) {
+export function Providers({ session, branding, children }) {
   return (
     <SessionProvider session={session}>
-      <ToastProvider>{children}</ToastProvider>
+      <BrandingProvider branding={branding}>
+        <FaviconSync />
+        <ToastProvider>{children}</ToastProvider>
+      </BrandingProvider>
     </SessionProvider>
   );
 }

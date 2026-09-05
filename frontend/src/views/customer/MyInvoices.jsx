@@ -38,7 +38,7 @@ export function MyInvoices() {
     { key: 'issuedAt', header: 'Issued', render: (row) => formatDate(row.issuedAt) },
     {
       key: 'actions',
-      header: '',
+      header: 'Action',
       render: (row) => (
         <Button variant="ghost" loading={downloadingId === row.id} onClick={() => handleDownload(row)}>
           Download PDF

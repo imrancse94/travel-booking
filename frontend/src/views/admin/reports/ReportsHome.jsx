@@ -7,6 +7,7 @@ import * as hotelService from '../../../services/hotelService.js';
 import * as userService from '../../../services/userService.js';
 import { BOOKING_SOURCE_OPTIONS, PAYMENT_METHOD_OPTIONS, REPORT_TYPE_OPTIONS } from '../../../constants/options.js';
 import { triggerBlobDownload } from '../../../utils/format.js';
+import { MAX_PAGE_SIZE } from '../../../constants/pagination.js';
 
 function humanizeKey(key) {
   return key
@@ -37,8 +38,14 @@ export function ReportsHome() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    hotelService.list({ limit: 100 }).then((res) => setHotels(res.data || []));
-    userService.list({ limit: 200 }).then((res) => setAgents(res.data || []));
+    hotelService
+      .list({ limit: MAX_PAGE_SIZE })
+      .then((res) => setHotels(res.data || []))
+      .catch(() => setHotels([]));
+    userService
+      .list({ limit: MAX_PAGE_SIZE })
+      .then((res) => setAgents(res.data || []))
+      .catch(() => setAgents([]));
   }, []);
 
   function runReport() {
@@ -140,6 +147,8 @@ export function ReportsHome() {
       </Card>
 
       <Card title="Results" style={{ marginTop: 'var(--space-5)' }}>
+        {/* Report rows are grouped aggregates with no id of their own, and the whole
+            array is replaced on every run, so the index is a stable key here. */}
         {error ? (
           <div className="error-state">
             <p>Could not load this report: {error.message}</p>
@@ -147,7 +156,12 @@ export function ReportsHome() {
         ) : loading ? (
           <Loader label="Running report..." />
         ) : (
-          <Table columns={columns} rows={rows} emptyMessage="No results. Adjust the filters and run the report again." />
+          <Table
+            columns={columns}
+            rows={rows}
+            rowKey={(row, i) => i}
+            emptyMessage="No results. Adjust the filters and run the report again."
+          />
         )}
       </Card>
     </div>

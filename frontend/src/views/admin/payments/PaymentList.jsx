@@ -19,7 +19,7 @@ const COLUMNS = [
   { key: 'paidAt', header: 'Paid At', render: (row) => formatDateTime(row.paidAt) },
   {
     key: 'actions',
-    header: '',
+    header: 'Action',
     render: (row) => <Link href={`/admin/payments/${row.id}`}>View</Link>,
   },
 ];

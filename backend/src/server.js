@@ -1,7 +1,7 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import logger from './config/logger.js';
-import { prisma } from './config/prisma.js';
+import { connectDb, disconnectDb } from './db/index.js';
 import { getRedisClient } from './config/redis.js';
 import { startBookingHoldSweeper } from './jobs/holdExpiryJob.js';
 
@@ -10,7 +10,7 @@ let server;
 let stopHoldSweeper;
 
 async function start() {
-  await prisma.$connect();
+  await connectDb();
   logger.info('Connected to PostgreSQL');
 
   getRedisClient();
@@ -39,7 +39,7 @@ async function shutdown(signal) {
         server.close((err) => (err ? reject(err) : resolve()));
       });
     }
-    await prisma.$disconnect();
+    await disconnectDb();
     const redis = getRedisClient();
     redis.disconnect();
     clearTimeout(timeout);

@@ -32,6 +32,19 @@ export const env = {
 
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
 
+  /**
+   * Where the app is reachable from a browser. Uploaded files are returned as
+   * absolute URLs built from it, because a relative /uploads/... path is
+   * useless in the two places the URL travels to: an email client rendering
+   * the agency logo, and any API consumer that is not the web app.
+   *
+   * Defaults to the first CORS origin, which is already the public app origin
+   * in every environment; PUBLIC_URL overrides it when they differ.
+   */
+  publicUrl: (process.env.PUBLIC_URL || (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',')[0])
+    .trim()
+    .replace(/\/+$/, ''),
+
   smtp: {
     host: process.env.SMTP_HOST || '',
     port: Number(process.env.SMTP_PORT || 587),
