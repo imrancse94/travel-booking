@@ -6,7 +6,7 @@ import * as customerService from '../../services/customerService.js';
 import { changePasswordAction } from '../../server/actions/auth.actions.js';
 import { updateMyProfileAction } from '../../server/actions/customer.actions.js';
 import { callAction } from '../../lib/callAction.js';
-import { formatDateInput } from '../../utils/format.js';
+import { formatDateInput, nullsToEmptyStrings } from '../../utils/format.js';
 
 const EMPTY_PROFILE = {
   firstName: '',
@@ -38,7 +38,7 @@ export function Profile() {
         const me = res.data;
         setProfile({
           ...EMPTY_PROFILE,
-          ...me,
+          ...nullsToEmptyStrings(me),
           passportExpiry: formatDateInput(me.passportExpiry),
           dateOfBirth: formatDateInput(me.dateOfBirth),
         });

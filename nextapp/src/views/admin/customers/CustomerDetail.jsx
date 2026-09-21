@@ -13,13 +13,13 @@ const BOOKING_COLUMNS = [
   { key: 'checkIn', header: 'Check-in', render: (b) => formatDate(b.checkIn) },
   { key: 'checkOut', header: 'Check-out', render: (b) => formatDate(b.checkOut) },
   { key: 'status', header: 'Status', render: (b) => <StatusBadge status={b.status} /> },
-  { key: 'totalAmount', header: 'Total', render: (b) => formatCurrency(b.totalAmount, b.currency) },
+  { key: 'totalAmount', header: 'Total', render: (b) => formatCurrency(b.totalAmount) },
 ];
 
 const PAYMENT_COLUMNS = [
   { key: 'bookingNumber', header: 'Booking #', render: (p) => p.booking?.bookingNumber || '—' },
   { key: 'method', header: 'Method', render: (p) => <StatusBadge status={p.method} tone="neutral" /> },
-  { key: 'amount', header: 'Amount', render: (p) => formatCurrency(p.amount, p.currency) },
+  { key: 'amount', header: 'Amount', render: (p) => formatCurrency(p.amount) },
   { key: 'status', header: 'Status', render: (p) => <StatusBadge status={p.status} /> },
   { key: 'paidAt', header: 'Paid At', render: (p) => formatDate(p.paidAt) },
 ];

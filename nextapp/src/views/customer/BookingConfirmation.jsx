@@ -12,7 +12,7 @@ const ROOM_COLUMNS = [
   { key: 'checkIn', header: 'Check-in', render: (r) => formatDate(r.checkIn) },
   { key: 'checkOut', header: 'Check-out', render: (r) => formatDate(r.checkOut) },
   { key: 'nights', header: 'Nights' },
-  { key: 'totalPrice', header: 'Total', render: (r) => formatCurrency(r.totalPrice, r.currency) },
+  { key: 'totalPrice', header: 'Total', render: (r) => formatCurrency(r.totalPrice) },
 ];
 
 /** Post-booking confirmation: booking number/status, hotel/dates/rooms, amounts, link to My Bookings. */
@@ -96,15 +96,15 @@ export function BookingConfirmation() {
           <div className="detail-list">
             <div>
               <p className="detail-item__label">Total</p>
-              <p className="detail-item__value">{formatCurrency(booking.totalAmount, booking.currency)}</p>
+              <p className="detail-item__value">{formatCurrency(booking.totalAmount)}</p>
             </div>
             <div>
               <p className="detail-item__label">Paid</p>
-              <p className="detail-item__value">{formatCurrency(booking.paidAmount, booking.currency)}</p>
+              <p className="detail-item__value">{formatCurrency(booking.paidAmount)}</p>
             </div>
             <div>
               <p className="detail-item__label">Due</p>
-              <p className="detail-item__value">{formatCurrency(booking.dueAmount, booking.currency)}</p>
+              <p className="detail-item__value">{formatCurrency(booking.dueAmount)}</p>
             </div>
           </div>
         </Card>

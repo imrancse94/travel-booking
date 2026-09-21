@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_BRANDING } from '../lib/brandingDefaults.js';
-import { setDisplayTimezone } from '../utils/format.js';
+import { setDisplayTimezone, setDisplayCurrency } from '../utils/format.js';
 
 const BrandingContext = createContext({ branding: DEFAULT_BRANDING, applyBranding: () => {} });
 
@@ -13,18 +13,21 @@ const BrandingContext = createContext({ branding: DEFAULT_BRANDING, applyBrandin
  * the client so saving Settings re-brands the running app immediately --
  * without that, a new logo only appeared after a full reload.
  *
- * Also the one place that pushes `timezone` into utils/format.js's shared
- * date formatters (see setDisplayTimezone) -- set directly during render, not
- * only in an effect, so the very first paint already converts to the
- * configured zone instead of flashing UTC before an effect can run.
+ * Also the one place that pushes `timezone`/`currency` into utils/format.js's
+ * shared date/currency formatters (see setDisplayTimezone/setDisplayCurrency)
+ * -- set directly during render, not only in an effect, so the very first
+ * paint already converts to the configured zone/currency instead of flashing
+ * UTC/USD before an effect can run.
  */
 export function BrandingProvider({ branding: initial, children }) {
   const [branding, setBranding] = useState({ ...DEFAULT_BRANDING, ...(initial ?? {}) });
   setDisplayTimezone(branding.timezone);
+  setDisplayCurrency(branding.currency);
 
   useEffect(() => {
     setDisplayTimezone(branding.timezone);
-  }, [branding.timezone]);
+    setDisplayCurrency(branding.currency);
+  }, [branding.timezone, branding.currency]);
 
   const value = useMemo(
     () => ({

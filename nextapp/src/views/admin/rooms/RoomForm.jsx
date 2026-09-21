@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { nullsToEmptyStrings } from '../../../utils/format.js';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeftIcon, Button, Card, Input, Loader, SectionTabs, Select, useToast } from '../../../components/ui/index.js';
 import * as roomService from '../../../services/roomService.js';
@@ -39,7 +40,7 @@ export function RoomForm() {
     setLoading(true);
     roomService
       .getById(id)
-      .then((res) => setForm({ ...EMPTY_FORM, ...res.data }))
+      .then((res) => setForm({ ...EMPTY_FORM, ...nullsToEmptyStrings(res.data) }))
       .catch((err) => show(err.message, 'error'))
       .finally(() => setLoading(false));
   }, [id, isEdit, show]);

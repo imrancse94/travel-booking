@@ -94,24 +94,24 @@ export function InvoiceDetail() {
           </div>
           <div>
             <p className="detail-item__label">Subtotal</p>
-            <p className="detail-item__value">{formatCurrency(invoice.subtotal, invoice.currency)}</p>
+            <p className="detail-item__value">{formatCurrency(invoice.subtotal)}</p>
           </div>
           <div>
             <p className="detail-item__label">Discount</p>
-            <p className="detail-item__value">{formatCurrency(invoice.discountAmount, invoice.currency)}</p>
+            <p className="detail-item__value">{formatCurrency(invoice.discountAmount)}</p>
           </div>
           <div>
             <p className="detail-item__label">Tax</p>
-            <p className="detail-item__value">{formatCurrency(invoice.taxAmount, invoice.currency)}</p>
+            <p className="detail-item__value">{formatCurrency(invoice.taxAmount)}</p>
           </div>
           <div>
             <p className="detail-item__label">Total</p>
-            <p className="detail-item__value">{formatCurrency(invoice.totalAmount, invoice.currency)}</p>
+            <p className="detail-item__value">{formatCurrency(invoice.totalAmount)}</p>
           </div>
           <div>
             <p className="detail-item__label">Paid / Due</p>
             <p className="detail-item__value">
-              {formatCurrency(invoice.paidAmount, invoice.currency)} / {formatCurrency(invoice.dueAmount, invoice.currency)}
+              {formatCurrency(invoice.paidAmount)} / {formatCurrency(invoice.dueAmount)}
             </p>
           </div>
         </div>

@@ -50,7 +50,7 @@ export function TourBookingList() {
     },
     { key: 'participants', header: 'Participants' },
     { key: 'travelDate', header: 'Travel Date', render: (row) => formatDate(row.travelDate) },
-    { key: 'totalAmount', header: 'Total', render: (row) => formatCurrency(row.totalAmount, row.currency) },
+    { key: 'totalAmount', header: 'Total', render: (row) => formatCurrency(row.totalAmount) },
     { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
     ...(canUpdate
       ? [

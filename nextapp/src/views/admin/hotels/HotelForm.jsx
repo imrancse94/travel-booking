@@ -7,6 +7,7 @@ import * as hotelService from '../../../services/hotelService.js';
 import { saveHotelAction } from '../../../server/actions/hotel.actions.js';
 import { callAction } from '../../../lib/callAction.js';
 import * as amenityService from '../../../services/amenityService.js';
+import { nullsToEmptyStrings } from '../../../utils/format.js';
 import { HOTEL_STATUS_OPTIONS } from '../../../constants/options.js';
 import { apiFieldErrors, toastFromApiError, toastFromFieldErrors } from '../../../utils/formErrors.js';
 
@@ -62,7 +63,7 @@ export function HotelForm() {
         const hotel = res.data;
         setForm({
           ...EMPTY_FORM,
-          ...hotel,
+          ...nullsToEmptyStrings(hotel),
           starRating: hotel.starRating ?? '',
           latitude: hotel.latitude ?? '',
           longitude: hotel.longitude ?? '',

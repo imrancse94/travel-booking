@@ -57,7 +57,7 @@ export function TourPackageList() {
     },
     { key: 'destination', header: 'Destination', render: (row) => row.destination?.name || '—' },
     { key: 'durationDays', header: 'Duration', render: (row) => `${row.durationDays} day(s)` },
-    { key: 'price', header: 'Price', render: (row) => formatCurrency(row.price, row.currency) },
+    { key: 'price', header: 'Price', render: (row) => formatCurrency(row.price) },
     { key: 'maxParticipants', header: 'Max Participants' },
     { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
     {

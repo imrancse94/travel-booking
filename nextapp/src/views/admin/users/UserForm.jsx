@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { nullsToEmptyStrings } from '../../../utils/format.js';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeftIcon, Button, Card, Input, Loader, Select, useToast } from '../../../components/ui/index.js';
 import * as userService from '../../../services/userService.js';
@@ -40,7 +41,7 @@ export function UserForm() {
       .getById(id)
       .then((res) => {
         const user = res.data;
-        setForm({ ...EMPTY_FORM, ...user, password: '' });
+        setForm({ ...EMPTY_FORM, ...nullsToEmptyStrings(user), password: '' });
         const ids = (user.userRoles || []).map((ur) => ur.roleId || ur.role?.id).filter(Boolean);
         setSelectedRoleIds(ids);
       })

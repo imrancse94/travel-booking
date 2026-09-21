@@ -263,7 +263,7 @@ export function HotelSearch() {
                     <div className="hotel-card__price">
                       {cheapest ? (
                         <>
-                          {formatCurrency(cheapest.ratePerNight, cheapest.currency)}
+                          {formatCurrency(cheapest.ratePerNight)}
                           <span className="hotel-card__price-hint">per night, from</span>
                         </>
                       ) : (

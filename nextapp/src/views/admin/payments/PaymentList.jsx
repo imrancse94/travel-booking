@@ -14,7 +14,7 @@ const COLUMNS = [
     render: (row) => (row.booking ? <Link href={`/admin/bookings/${row.booking.id}`}>{row.booking.bookingNumber}</Link> : '—'),
   },
   { key: 'method', header: 'Method', render: (row) => <StatusBadge status={row.method} tone="neutral" /> },
-  { key: 'amount', header: 'Amount', render: (row) => formatCurrency(row.amount, row.currency) },
+  { key: 'amount', header: 'Amount', render: (row) => formatCurrency(row.amount) },
   { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
   { key: 'paidAt', header: 'Paid At', render: (row) => formatDateTime(row.paidAt) },
   {

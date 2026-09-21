@@ -28,7 +28,7 @@ const ROOM_COLUMNS = [
   { key: 'checkIn', header: 'Check-in', render: (r) => formatDate(r.checkIn) },
   { key: 'checkOut', header: 'Check-out', render: (r) => formatDate(r.checkOut) },
   { key: 'nights', header: 'Nights' },
-  { key: 'totalPrice', header: 'Total', render: (r) => formatCurrency(r.totalPrice, r.currency) },
+  { key: 'totalPrice', header: 'Total', render: (r) => formatCurrency(r.totalPrice) },
 ];
 
 const SERVICE_COLUMNS = [
@@ -39,7 +39,7 @@ const SERVICE_COLUMNS = [
 
 const PAYMENT_COLUMNS = [
   { key: 'method', header: 'Method', render: (p) => <StatusBadge status={p.method} tone="neutral" /> },
-  { key: 'amount', header: 'Amount', render: (p) => formatCurrency(p.amount, p.currency) },
+  { key: 'amount', header: 'Amount', render: (p) => formatCurrency(p.amount) },
   { key: 'status', header: 'Status', render: (p) => <StatusBadge status={p.status} /> },
   { key: 'paidAt', header: 'Paid At', render: (p) => formatDateTime(p.paidAt) },
 ];
@@ -129,15 +129,15 @@ export function BookingDetail() {
           </div>
           <div>
             <p className="detail-item__label">Total</p>
-            <p className="detail-item__value">{formatCurrency(booking.totalAmount, booking.currency)}</p>
+            <p className="detail-item__value">{formatCurrency(booking.totalAmount)}</p>
           </div>
           <div>
             <p className="detail-item__label">Paid</p>
-            <p className="detail-item__value">{formatCurrency(booking.paidAmount, booking.currency)}</p>
+            <p className="detail-item__value">{formatCurrency(booking.paidAmount)}</p>
           </div>
           <div>
             <p className="detail-item__label">Due</p>
-            <p className="detail-item__value">{formatCurrency(booking.dueAmount, booking.currency)}</p>
+            <p className="detail-item__value">{formatCurrency(booking.dueAmount)}</p>
           </div>
         </div>
         {booking.specialRequests && (

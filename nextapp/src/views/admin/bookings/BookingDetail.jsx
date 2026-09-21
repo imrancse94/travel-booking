@@ -52,7 +52,7 @@ const SERVICE_COLUMNS = [
 
 const PAYMENT_COLUMNS = [
   { key: 'method', header: 'Method', render: (p) => <StatusBadge status={p.method} tone="neutral" /> },
-  { key: 'amount', header: 'Amount', render: (p) => formatCurrency(p.amount, p.currency) },
+  { key: 'amount', header: 'Amount', render: (p) => formatCurrency(p.amount) },
   { key: 'status', header: 'Status', render: (p) => <StatusBadge status={p.status} /> },
   { key: 'paidAt', header: 'Paid At', render: (p) => formatDateTime(p.paidAt) },
 ];
@@ -206,24 +206,24 @@ export function BookingDetail() {
             </div>
             <div>
               <p className="detail-item__label">Subtotal</p>
-              <p className="detail-item__value">{formatCurrency(booking.subtotal, booking.currency)}</p>
+              <p className="detail-item__value">{formatCurrency(booking.subtotal)}</p>
             </div>
             <div>
               <p className="detail-item__label">Discount</p>
-              <p className="detail-item__value">{formatCurrency(booking.discountAmount, booking.currency)}</p>
+              <p className="detail-item__value">{formatCurrency(booking.discountAmount)}</p>
             </div>
             <div>
               <p className="detail-item__label">Tax</p>
-              <p className="detail-item__value">{formatCurrency(booking.taxAmount, booking.currency)}</p>
+              <p className="detail-item__value">{formatCurrency(booking.taxAmount)}</p>
             </div>
             <div>
               <p className="detail-item__label">Total</p>
-              <p className="detail-item__value">{formatCurrency(booking.totalAmount, booking.currency)}</p>
+              <p className="detail-item__value">{formatCurrency(booking.totalAmount)}</p>
             </div>
             <div>
               <p className="detail-item__label">Paid / Due</p>
               <p className="detail-item__value">
-                {formatCurrency(booking.paidAmount, booking.currency)} / {formatCurrency(booking.dueAmount, booking.currency)}
+                {formatCurrency(booking.paidAmount)} / {formatCurrency(booking.dueAmount)}
               </p>
             </div>
           </div>

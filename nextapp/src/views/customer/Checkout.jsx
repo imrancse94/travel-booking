@@ -118,7 +118,6 @@ export function Checkout() {
     () => (checkoutState?.selections || []).reduce((sum, s) => sum + s.quantity, 0),
     [checkoutState]
   );
-  const currency = checkoutState?.currency || 'USD';
   const selectedServices = useMemo(
     () => catalog.filter((svc) => selectedServiceIds.includes(svc.id)),
     [catalog, selectedServiceIds]
@@ -380,7 +379,7 @@ export function Checkout() {
                   <span>
                     {s.quantity} × {s.name} ({s.nights} night{s.nights === 1 ? '' : 's'})
                   </span>
-                  <span>{formatCurrency(Number(s.totalPrice) * s.quantity, s.currency)}</span>
+                  <span>{formatCurrency(Number(s.totalPrice) * s.quantity)}</span>
                 </div>
               ))}
               <div className="detail-list" style={{ marginTop: 'var(--space-4)' }}>
@@ -426,7 +425,7 @@ export function Checkout() {
                           {svc.description && <span className="service-picker__desc"> &mdash; {svc.description}</span>}
                         </span>
                       </span>
-                      <span>{formatCurrency(Number(svc.price) + Number(svc.tax || 0), currency)}</span>
+                      <span>{formatCurrency(Number(svc.price) + Number(svc.tax || 0))}</span>
                     </label>
                   ))}
                 </div>
@@ -452,20 +451,20 @@ export function Checkout() {
               {(checkoutState.selections || []).map((s) => (
                 <div key={s.roomTypeId} className="summary-line">
                   <span>
-                    {s.quantity} × {s.name} &middot; {formatCurrency(s.ratePerNight, s.currency)}/night &times; {s.nights}
+                    {s.quantity} × {s.name} &middot; {formatCurrency(s.ratePerNight)}/night &times; {s.nights}
                   </span>
-                  <span>{formatCurrency(Number(s.totalPrice) * s.quantity, s.currency)}</span>
+                  <span>{formatCurrency(Number(s.totalPrice) * s.quantity)}</span>
                 </div>
               ))}
               {selectedServices.map((svc) => (
                 <div key={svc.id} className="summary-line">
                   <span>{svc.name}</span>
-                  <span>{formatCurrency(Number(svc.price) + Number(svc.tax || 0), currency)}</span>
+                  <span>{formatCurrency(Number(svc.price) + Number(svc.tax || 0))}</span>
                 </div>
               ))}
               <div className="summary-line summary-line--total">
                 <span>Estimated Total</span>
-                <span>{formatCurrency(estimatedTotal, currency)}</span>
+                <span>{formatCurrency(estimatedTotal)}</span>
               </div>
               <p className="summary-note">
                 This is an estimate based on current pricing. The confirmed total, including any taxes or fees, is
@@ -543,7 +542,7 @@ export function Checkout() {
               <span />
             ) : (
               <Button type="button" onClick={handleSubmit} loading={submitting}>
-                Confirm &amp; Pay {formatCurrency(estimatedTotal, currency)}
+                Confirm &amp; Pay {formatCurrency(estimatedTotal)}
               </Button>
             )}
           </div>
@@ -561,18 +560,18 @@ export function Checkout() {
               <span>
                 {s.quantity} × {s.name}
               </span>
-              <span>{formatCurrency(Number(s.totalPrice) * s.quantity, s.currency)}</span>
+              <span>{formatCurrency(Number(s.totalPrice) * s.quantity)}</span>
             </div>
           ))}
           {selectedServices.map((svc) => (
             <div key={svc.id} className="summary-line">
               <span>{svc.name}</span>
-              <span>{formatCurrency(Number(svc.price) + Number(svc.tax || 0), currency)}</span>
+              <span>{formatCurrency(Number(svc.price) + Number(svc.tax || 0))}</span>
             </div>
           ))}
           <div className="summary-line summary-line--total">
             <span>Estimated Total</span>
-            <span>{formatCurrency(estimatedTotal, currency)}</span>
+            <span>{formatCurrency(estimatedTotal)}</span>
           </div>
         </Card>
       </div>

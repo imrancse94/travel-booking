@@ -14,8 +14,8 @@ const COLUMNS = [
     header: 'Booking #',
     render: (row) => (row.booking ? <Link href={`/admin/bookings/${row.booking.id}`}>{row.booking.bookingNumber}</Link> : '—'),
   },
-  { key: 'totalAmount', header: 'Total', render: (row) => formatCurrency(row.totalAmount, row.currency) },
-  { key: 'dueAmount', header: 'Due', render: (row) => formatCurrency(row.dueAmount, row.currency) },
+  { key: 'totalAmount', header: 'Total', render: (row) => formatCurrency(row.totalAmount) },
+  { key: 'dueAmount', header: 'Due', render: (row) => formatCurrency(row.dueAmount) },
   { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
   { key: 'issuedAt', header: 'Issued', render: (row) => formatDate(row.issuedAt) },
 ];

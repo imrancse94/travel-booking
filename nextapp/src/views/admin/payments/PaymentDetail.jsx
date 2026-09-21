@@ -115,7 +115,7 @@ export function PaymentDetail() {
         <div className="detail-list">
           <div>
             <p className="detail-item__label">Amount</p>
-            <p className="detail-item__value">{formatCurrency(payment.amount, payment.currency)}</p>
+            <p className="detail-item__value">{formatCurrency(payment.amount)}</p>
           </div>
           <div>
             <p className="detail-item__label">Method</p>
@@ -160,7 +160,7 @@ export function PaymentDetail() {
             required
             value={refundAmount}
             onChange={(e) => setRefundAmount(e.target.value)}
-            hint={`Up to ${formatCurrency(payment.amount, payment.currency)}`}
+            hint={`Up to ${formatCurrency(payment.amount)}`}
           />
           <Textarea label="Reason" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} />
         </form>

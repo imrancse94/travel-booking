@@ -112,10 +112,14 @@ export function SettingsPage() {
       setSettings(saved);
       // Re-brand the running app immediately -- header, sidebar and footer all
       // read from this context, so the new name/logo appear without a reload.
+      // `currency` is included so every formatCurrency() call across the app
+      // (most of which never pass a currency argument -- see utils/format.js)
+      // starts showing the new symbol right away too, not just after a reload.
       applyBranding({
         agency_name: saved.agency_name,
         agency_logo_url: saved.agency_logo_url,
         agency_favicon_url: saved.agency_favicon_url,
+        currency: saved.currency,
       });
       show('Settings saved', 'success');
     } catch (err) {
@@ -227,7 +231,17 @@ export function SettingsPage() {
                 value={settings.currency ?? ''}
                 disabled={!canUpdate}
                 onChange={(e) => setField('currency', e.target.value)}
-                options={availableCurrencies.map((code) => ({ value: code, label: code }))}
+                // Always include the currently-set default even if it has
+                // fallen out of the available-currencies list (e.g. edited
+                // before this list existed, or left over from a previous
+                // save) -- otherwise a <select> with no matching <option>
+                // silently shows the FIRST option in the list while the
+                // underlying value stays unchanged, so Save appears to do
+                // nothing: what's on screen never matched what would be sent.
+                options={(availableCurrencies.includes(settings.currency) || !settings.currency
+                  ? availableCurrencies
+                  : [settings.currency, ...availableCurrencies]
+                ).map((code) => ({ value: code, label: code }))}
               />
               <Select
                 label="Timezone"

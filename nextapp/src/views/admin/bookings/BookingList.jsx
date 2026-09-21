@@ -27,7 +27,7 @@ const COLUMNS = [
   {
     key: 'totalAmount',
     header: 'Total',
-    render: (row) => formatCurrency(row.totalAmount, row.currency),
+    render: (row) => formatCurrency(row.totalAmount),
   },
 ];
 

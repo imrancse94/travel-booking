@@ -232,9 +232,9 @@ export function HotelDetails() {
                     <div className="room-type-card__price">
                       {rt.ratePerNight != null ? (
                         <>
-                          <div className="room-type-card__rate">{formatCurrency(rt.ratePerNight, rt.currency)}/night</div>
+                          <div className="room-type-card__rate">{formatCurrency(rt.ratePerNight)}/night</div>
                           <div className="room-type-card__total">
-                            {formatCurrency(rt.totalPrice, rt.currency)} total for {rt.nights} night(s)
+                            {formatCurrency(rt.totalPrice)} total for {rt.nights} night(s)
                           </div>
                         </>
                       ) : (
@@ -308,12 +308,12 @@ export function HotelDetails() {
                   <span>
                     {r.quantity} × {r.roomType.name}
                   </span>
-                  <span>{formatCurrency(Number(r.roomType.totalPrice) * r.quantity, r.roomType.currency)}</span>
+                  <span>{formatCurrency(Number(r.roomType.totalPrice) * r.quantity)}</span>
                 </div>
               ))}
               <div className="summary-line summary-line--total">
                 <span>Estimated Total</span>
-                <span>{hasPricedSelection ? formatCurrency(estimatedTotal, currency) : '—'}</span>
+                <span>{hasPricedSelection ? formatCurrency(estimatedTotal) : '—'}</span>
               </div>
               <p className="summary-note">Estimated only. The final total is calculated when you book.</p>
               <Button className="auth-page__submit" onClick={handleProceedToCheckout} disabled={!hasPricedSelection}>

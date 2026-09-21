@@ -150,9 +150,9 @@ export function RatePlanList() {
     { key: 'ratePlan', header: 'Rate Plan', render: (r) => r.ratePlan?.name || '—' },
     { key: 'startDate', header: 'From', render: (r) => formatDate(r.startDate) },
     { key: 'endDate', header: 'To', render: (r) => formatDate(r.endDate) },
-    { key: 'price', header: 'Price', render: (r) => formatCurrency(r.price, r.currency) },
-    { key: 'extraAdultPrice', header: 'Extra Adult', render: (r) => formatCurrency(r.extraAdultPrice, r.currency) },
-    { key: 'extraChildPrice', header: 'Extra Child', render: (r) => formatCurrency(r.extraChildPrice, r.currency) },
+    { key: 'price', header: 'Price', render: (r) => formatCurrency(r.price) },
+    { key: 'extraAdultPrice', header: 'Extra Adult', render: (r) => formatCurrency(r.extraAdultPrice) },
+    { key: 'extraChildPrice', header: 'Extra Child', render: (r) => formatCurrency(r.extraChildPrice) },
     ...(canManage
       ? [
           {

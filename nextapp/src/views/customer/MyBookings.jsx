@@ -17,7 +17,7 @@ const COLUMNS = [
   { key: 'checkIn', header: 'Check-in', render: (row) => formatDate(row.checkIn) },
   { key: 'checkOut', header: 'Check-out', render: (row) => formatDate(row.checkOut) },
   { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
-  { key: 'totalAmount', header: 'Total', render: (row) => formatCurrency(row.totalAmount, row.currency) },
+  { key: 'totalAmount', header: 'Total', render: (row) => formatCurrency(row.totalAmount) },
 ];
 
 /** The logged-in customer's own bookings (server-scoped -- no customerId filter needed client-side). */

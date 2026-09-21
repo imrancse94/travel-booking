@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { nullsToEmptyStrings } from '../../../utils/format.js';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeftIcon,
@@ -70,7 +71,7 @@ export function TourPackageForm() {
     setLoading(true);
     Promise.all([tourService.getPackage(id), tourService.listItineraries(id).catch(() => ({ data: [] }))])
       .then(([pkgRes, itineraryRes]) => {
-        setForm({ ...EMPTY_FORM, ...pkgRes.data });
+        setForm({ ...EMPTY_FORM, ...nullsToEmptyStrings(pkgRes.data) });
         const loadedDays = itineraryRes.data || [];
         setDays(loadedDays.length ? loadedDays : [emptyDay(1)]);
       })

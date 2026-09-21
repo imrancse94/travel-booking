@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { nullsToEmptyStrings } from '../../../utils/format.js';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeftIcon, Button, Card, Input, Loader, SectionTabs, Select, Textarea, useToast } from '../../../components/ui/index.js';
 import * as roomTypeService from '../../../services/roomTypeService.js';
@@ -57,7 +58,7 @@ export function RoomTypeForm() {
       .getById(id)
       .then((res) => {
         const rt = res.data;
-        setForm({ ...EMPTY_FORM, ...rt, roomSize: rt.roomSize ?? '' });
+        setForm({ ...EMPTY_FORM, ...nullsToEmptyStrings(rt), roomSize: rt.roomSize ?? '' });
         setSelectedAmenityIds((rt.amenities || []).map((a) => a.amenityId || a.amenity?.id));
       })
       .catch((err) => show(err.message, 'error'))
