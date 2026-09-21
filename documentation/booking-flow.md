@@ -1,6 +1,6 @@
 # Booking Flow
 
-This document walks through the full lifecycle of a hotel booking, end to end, as actually implemented in `backend/src/services/bookingService.js`, `availabilityService.js`, `pricingService.js`, `utils/bookingNumber.js`, and `jobs/holdExpiryJob.js`. This is the single most critical piece of the system — it is what prevents double-booking a room.
+This document walks through the full lifecycle of a hotel booking, end to end, as actually implemented in `nextapp/src/server/services/bookingService.js`, `availabilityService.js`, `pricingService.js`, `utils/bookingNumber.js`, and `jobs/holdExpiryJob.js`. This is the single most critical piece of the system — it is what prevents double-booking a room.
 
 ## 1. End-to-end lifecycle
 
@@ -57,7 +57,7 @@ Passing `immediateConfirm: true` into `createBooking` (gated by the caller's own
 
 ### 5c. Hold expires — background sweeper
 
-If no payment/confirmation happens within the hold window, a background interval job (`startBookingHoldSweeper`, started from `server.js` and polling every 60 seconds) calls `releaseExpiredHolds()`, which finds every booking still `held` with `hold_expires_at` in the past and — inside its own transaction, re-checking the status is still `held` to avoid a race with a concurrent confirm — transitions it to `cancelled` with reason "Hold expired". Because the availability overlap check (section 4) only considers `held`/`confirmed`/`checked_in` bookings as blocking, a `cancelled` booking's rooms become bookable again immediately — there is no separate "release" step; cancelling *is* releasing.
+If no payment/confirmation happens within the hold window, a background interval job (`startBookingHoldSweeper`, started from `nextapp/instrumentation.js` at server startup and polling every 60 seconds) calls `releaseExpiredHolds()`, which finds every booking still `held` with `hold_expires_at` in the past and — inside its own transaction, re-checking the status is still `held` to avoid a race with a concurrent confirm — transitions it to `cancelled` with reason "Hold expired". Because the availability overlap check (section 4) only considers `held`/`confirmed`/`checked_in` bookings as blocking, a `cancelled` booking's rooms become bookable again immediately — there is no separate "release" step; cancelling *is* releasing.
 
 ### 6. Check-in — `POST /bookings/:id/check-in`
 
@@ -95,7 +95,7 @@ Available any time before the booking reaches `cancelled`/`checked_out`/`complet
 - Both transactions call `lockRooms`. One of them (say A) acquires the advisory lock on `X` first; B's `pg_advisory_xact_lock` call **blocks** — B's transaction does not proceed past this line until A's transaction ends.
 - A proceeds: re-checks overlap (finds none, since B hasn't committed anything yet), creates its booking, and commits. Committing releases A's advisory lock.
 - B's blocked call now acquires the lock and proceeds: it re-checks overlap and this time **does** find A's just-committed `booking_rooms` row overlapping the requested dates (A's booking is `held`, which is a blocking status) — so B throws `ConflictError` and rolls back.
-- Net result: exactly one `201 Created`, one `409 Conflict`. This is verified by an automated test (`backend/tests/integration/booking.concurrency.test.js`) that fires 10 simultaneous requests for the same room/dates and asserts exactly one succeeds, plus a second test that fires more simultaneous type-based (`roomTypeId`) requests than physical rooms exist and asserts exactly one booking per room, each assigned a distinct room.
+- Net result: exactly one `201 Created`, one `409 Conflict`. This is verified by an automated test (`nextapp/src/tests/api/booking.concurrency.test.js`) that fires 10 simultaneous requests for the same room/dates and asserts exactly one succeeds, plus a second test that fires more simultaneous type-based (`roomTypeId`) requests than physical rooms exist and asserts exactly one booking per room, each assigned a distinct room.
 
 This guarantee holds regardless of how many application server processes/pods are running the API, because the lock lives in PostgreSQL itself (a per-connection advisory lock scoped to the transaction), not in application memory — it is safe under horizontal scaling.
 

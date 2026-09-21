@@ -10,8 +10,7 @@
 
 COMPOSE        ?= docker compose
 PROJECT        ?= travel-booking
-BACKEND        ?= backend
-FRONTEND       ?= frontend
+APP            ?= app
 PG_SERVICE     ?= postgres
 REDIS_SERVICE  ?= redis
 
@@ -21,7 +20,7 @@ POSTGRES_DB    ?= booking_db
 POSTGRES_PASSWORD ?= booking_password
 TEST_DB        ?= booking_test
 TEST_DATABASE_URL ?= postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(PG_SERVICE):5432/$(TEST_DB)
-API_URL        ?= http://localhost:4000/api/v1
+API_URL        ?= http://localhost:5173/api/v1
 WEB_URL        ?= http://localhost:5173
 MAIL_URL       ?= http://localhost:8026
 PGADMIN_URL    ?= http://localhost:5050
@@ -55,15 +54,13 @@ setup: env up seed ## First-time setup: env files, build, start the stack, seed 
 	@echo
 	@$(MAKE) --no-print-directory urls
 
-env: ## Create backend/.env + frontend/.env from the .env.example templates (never overwrites)
-	@for d in backend frontend; do \
-		if [ -f $$d/.env ]; then echo "  exists   $$d/.env"; \
-		else cp $$d/.env.example $$d/.env; echo "  created  $$d/.env"; fi; \
-	done
+env: ## Create nextapp/.env from its .env.example template (never overwrites)
+	@if [ -f nextapp/.env ]; then echo "  exists   nextapp/.env"; \
+	else cp nextapp/.env.example nextapp/.env; echo "  created  nextapp/.env"; fi
 
 urls: ## Print the local service URLs
-	@printf "  Customer site  %s\n  Admin console  %s/admin\n  Sign in        %s/login\n  API            %s\n  API docs       %s\n  Health         %s\n  Mailpit        %s\n  pgAdmin        %s\n" \
-		"$(WEB_URL)" "$(WEB_URL)" "$(WEB_URL)" "$(API_URL)" "http://localhost:4000/api-docs" "$(API_URL)/health" "$(MAIL_URL)" "$(PGADMIN_URL)"
+	@printf "  Customer site  %s\n  Admin console  %s/admin\n  Sign in        %s/login\n  API            %s\n  Health         %s\n  Mailpit        %s\n  pgAdmin        %s\n" \
+		"$(WEB_URL)" "$(WEB_URL)" "$(WEB_URL)" "$(API_URL)" "$(API_URL)/health" "$(MAIL_URL)" "$(PGADMIN_URL)"
 
 ##@ Stack
 
@@ -83,11 +80,10 @@ rebuild: env ## Rebuild images from scratch (no cache) and restart
 # rebuilt image -- which shows up as `sh: <binary>: not found`. `make rebuild`
 # does not fix it (it rebuilds images, not volumes) and `make clean` would take
 # the database with it. This drops only the dependency volumes.
-deps-refresh: env ## Re-install deps in the containers after changing package.json (keeps databases)
-	$(COMPOSE) rm -sf $(BACKEND) $(FRONTEND)
-	-docker volume rm $(PROJECT)_backend_node_modules \
-		$(PROJECT)_frontend_node_modules \
-		$(PROJECT)_frontend_next_cache
+deps-refresh: env ## Re-install deps in the container after changing package.json (keeps databases)
+	$(COMPOSE) rm -sf $(APP)
+	-docker volume rm $(PROJECT)_app_node_modules \
+		$(PROJECT)_app_next_cache
 	$(COMPOSE) up --build -d --wait
 
 down: ## Stop and remove the containers (keeps database volumes)
@@ -102,11 +98,8 @@ start: ## Start previously stopped containers
 restart: ## Restart every service
 	$(COMPOSE) restart
 
-restart-backend: ## Restart just the backend
-	$(COMPOSE) restart $(BACKEND)
-
-restart-frontend: ## Restart just the frontend
-	$(COMPOSE) restart $(FRONTEND)
+restart-app: ## Restart just the app
+	$(COMPOSE) restart $(APP)
 
 ps: ## Show container status
 	$(COMPOSE) ps
@@ -114,22 +107,16 @@ ps: ## Show container status
 logs: ## Follow logs from all services
 	$(COMPOSE) logs -f --tail=100
 
-logs-backend: ## Follow backend logs
-	$(COMPOSE) logs -f --tail=100 $(BACKEND)
-
-logs-frontend: ## Follow frontend logs
-	$(COMPOSE) logs -f --tail=100 $(FRONTEND)
+logs-app: ## Follow app logs
+	$(COMPOSE) logs -f --tail=100 $(APP)
 
 health: ## Curl the API health endpoint
 	@curl -fsS $(API_URL)/health && echo || echo "API unreachable at $(API_URL) -- is the stack up? (make up)"
 
 ##@ Shells
 
-sh-backend: ## Open a shell in the backend container
-	$(EXEC_TTY) $(BACKEND) sh
-
-sh-frontend: ## Open a shell in the frontend container
-	$(EXEC_TTY) $(FRONTEND) sh
+sh: ## Open a shell in the app container
+	$(EXEC_TTY) $(APP) sh
 
 psql: ## Open a psql session on the dev database
 	$(EXEC_TTY) $(PG_SERVICE) psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
@@ -144,15 +131,15 @@ pgadmin: ## Print the pgAdmin URL and the password its pre-registered connection
 ##@ Database
 
 migrate: ## Apply pending migrations
-	$(EXEC) $(BACKEND) npm run db:migrate
+	$(EXEC) $(APP) npm run db:migrate
 
-migrate-new: ## Generate a migration from src/db/schema.js -- make migrate-new name=add_x
+migrate-new: ## Generate a migration from src/server/db/schema.js -- make migrate-new name=add_x
 	@test -n "$(name)" || { echo "usage: make migrate-new name=<description>"; exit 1; }
-	$(EXEC_TTY) $(BACKEND) npx drizzle-kit generate --name $(name)
+	$(EXEC_TTY) $(APP) npx drizzle-kit generate --name $(name)
 	$(MAKE) migrate
 
-db-pull: ## Regenerate src/db/schema.js by introspecting the live database
-	$(EXEC_TTY) $(BACKEND) npm run db:pull
+db-pull: ## Regenerate the schema by introspecting the live database
+	$(EXEC_TTY) $(APP) npm run db:pull
 
 migrate-reset: ## DESTRUCTIVE: drop the schema and re-apply every migration
 	$(call confirm,This drops the dev database and all its data.)
@@ -160,72 +147,52 @@ migrate-reset: ## DESTRUCTIVE: drop the schema and re-apply every migration
 		"DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;"
 	$(MAKE) migrate
 
-studio: ## Open Drizzle Studio (needs a 4983:4983 port mapping on the backend service)
-	$(EXEC_TTY) $(BACKEND) npm run db:studio
+studio: ## Open Drizzle Studio (needs a 4983:4983 port mapping on the app service)
+	$(EXEC_TTY) $(APP) npm run db:studio
 
 seed: ## Load demo data (idempotent -- safe to re-run)
-	$(EXEC) $(BACKEND) npm run seed
+	$(EXEC) $(APP) npm run seed
 
 db-reset: migrate-reset seed ## DESTRUCTIVE: reset the database then re-seed demo data
 
 ##@ Quality
 
-test: test-backend test-frontend ## Run backend + frontend tests
-
-test-backend: ## Run backend tests (Jest + Supertest) against a separate test database
-	@# Jest truncates tables between suites, so it gets its own database rather
-	@# than the one holding your seeded dev data (same DB name CI uses).
+test: ## Run the app's tests (Vitest) against a separate test database
+	@# Tests truncate tables between suites, so they get their own database
+	@# rather than the one holding your seeded dev data (same DB name CI uses).
 	@$(EXEC) $(PG_SERVICE) psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -tAc \
 		"SELECT 1 FROM pg_database WHERE datname='$(TEST_DB)'" | grep -q 1 \
 		|| $(EXEC) $(PG_SERVICE) createdb -U $(POSTGRES_USER) $(TEST_DB)
-	$(EXEC) -e DATABASE_URL=$(TEST_DATABASE_URL) $(BACKEND) npm run db:migrate
-	$(EXEC) -e DATABASE_URL=$(TEST_DATABASE_URL) $(BACKEND) npm test
+	$(EXEC) -e DATABASE_URL=$(TEST_DATABASE_URL) $(APP) npm run db:migrate
+	$(EXEC) -e DATABASE_URL=$(TEST_DATABASE_URL) $(APP) npm test
 
-test-frontend: ## Run frontend tests (Vitest)
-	$(EXEC) $(FRONTEND) npm test
+lint: ## Lint the app
+	$(EXEC) $(APP) npm run lint
 
-lint: lint-backend lint-frontend ## Lint backend + frontend
-
-lint-backend: ## Lint the backend
-	$(EXEC) $(BACKEND) npm run lint
-
-lint-frontend: ## Lint the frontend
-	$(EXEC) $(FRONTEND) npm run lint
-
-lint-fix: ## Auto-fix lint errors in both packages
-	$(EXEC) $(BACKEND) npm run lint:fix
-	$(EXEC) $(FRONTEND) npm run lint:fix
+lint-fix: ## Auto-fix lint errors
+	$(EXEC) $(APP) npm run lint:fix
 
 smoke: ## End-to-end smoke test against the running stack (same script CI runs)
 	@API_URL="$(API_URL)" WEB_URL="$(WEB_URL)" MAIL_URL="$(MAIL_URL)" PGADMIN_URL="$(PGADMIN_URL)" \
 		./.github/scripts/smoke.sh
 
-ci: lint test ## What CI runs: lint + tests for both packages
+ci: lint test ## What CI runs: lint + tests
 
 ##@ Production build
 
-build: build-backend build-frontend ## Build both production Docker images
-
-build-backend: ## Build the backend production image
-	docker build --target production -t travel-booking-backend:local ./backend
-
-build-frontend: ## Build the frontend production image (Next.js standalone server)
-	docker build --target production -t travel-booking-frontend:local ./frontend
+build: ## Build the production Docker image (Next.js standalone server)
+	docker build --target production -t travel-booking-app:local ./nextapp
 
 ##@ Without Docker (host Node 20)
 
-local-deps: env ## Start only postgres + redis, for running the apps on the host
+local-deps: env ## Start only postgres + redis, for running the app on the host
 	$(COMPOSE) up -d --wait $(PG_SERVICE) $(REDIS_SERVICE)
 
-local-install: ## npm ci in backend and frontend on the host
-	cd backend && npm ci
-	cd frontend && npm ci
+local-install: ## npm ci in nextapp on the host
+	cd nextapp && npm ci
 
-local-backend: ## Run the backend on the host (point DATABASE_URL/REDIS_URL at localhost first)
-	cd backend && npm run db:migrate && npm run dev
-
-local-frontend: ## Run the Next.js dev server on the host
-	cd frontend && npm run dev
+local-app: ## Run the app on the host (point DATABASE_URL/REDIS_URL at localhost first)
+	cd nextapp && npm run db:migrate && npm run dev
 
 ##@ Cleanup
 
@@ -236,9 +203,9 @@ clean: ## DESTRUCTIVE: remove containers, named volumes (database included) and 
 prune: ## Reclaim disk: prune dangling Docker build cache and images
 	docker system prune -f
 
-.PHONY: help setup env urls up dev rebuild deps-refresh down stop start restart restart-backend \
-	restart-frontend ps logs logs-backend logs-frontend health sh-backend sh-frontend \
+.PHONY: help setup env urls up dev rebuild deps-refresh down stop start restart restart-app \
+	ps logs logs-app health sh \
 	psql redis-cli pgadmin migrate migrate-new db-pull migrate-reset studio seed db-reset \
-	test test-backend test-frontend smoke lint lint-backend lint-frontend lint-fix ci \
-	build build-backend build-frontend local-deps local-install local-backend \
-	local-frontend clean prune
+	test smoke lint lint-fix ci \
+	build local-deps local-install local-app \
+	clean prune

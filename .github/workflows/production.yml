@@ -1,0 +1,46 @@
+# Deploys to the production EC2 instance on every push to `main`, or on
+# demand. Secret names are unprefixed, mirroring what the old combined
+# main.yml used for its (only) production deploy job. Gated behind the
+# `production` GitHub environment, same as the old deploy job, so branch
+# protection / required reviewers still apply.
+name: Deploy — Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Existing image tag (commit SHA) to deploy. Leave blank to build this ref.'
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: production
+      image_tag: ${{ inputs.image_tag || '' }}
+    secrets:
+      ec2_host: ${{ secrets.AWS_EC2_IP_ADDRESS }}
+      ssh_user: ${{ secrets.AWS_HOST_USER }}
+      ssh_private_key: ${{ secrets.PRIVATE_KEY }}
+      postgres_user: ${{ secrets.POSTGRES_USER }}
+      postgres_password: ${{ secrets.POSTGRES_PASSWORD }}
+      postgres_db: ${{ secrets.POSTGRES_DB }}
+      jwt_secret: ${{ secrets.JWT_SECRET }}
+      jwt_refresh_secret: ${{ secrets.JWT_REFRESH_SECRET }}
+      payment_gateway: ${{ secrets.PAYMENT_GATEWAY }}
+      email_provider: ${{ secrets.EMAIL_PROVIDER }}
+      smtp_host: ${{ secrets.SMTP_HOST }}
+      smtp_port: ${{ secrets.SMTP_PORT }}
+      smtp_user: ${{ secrets.SMTP_USER }}
+      smtp_password: ${{ secrets.SMTP_PASSWORD }}
+      smtp_from: ${{ secrets.SMTP_FROM }}
+      sms_provider: ${{ secrets.SMS_PROVIDER }}
+      whatsapp_provider: ${{ secrets.WHATSAPP_PROVIDER }}
