@@ -157,14 +157,23 @@ db-reset: migrate-reset seed ## DESTRUCTIVE: reset the database then re-seed dem
 
 ##@ Quality
 
-test: ## Run the app's tests (Vitest) against a separate test database
-	@# Tests truncate tables between suites, so they get their own database
-	@# rather than the one holding your seeded dev data (same DB name CI uses).
-	@$(EXEC) $(PG_SERVICE) psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -tAc \
-		"SELECT 1 FROM pg_database WHERE datname='$(TEST_DB)'" | grep -q 1 \
-		|| $(EXEC) $(PG_SERVICE) createdb -U $(POSTGRES_USER) $(TEST_DB)
-	$(EXEC) -e DATABASE_URL=$(TEST_DATABASE_URL) $(APP) npm run db:migrate
-	$(EXEC) -e DATABASE_URL=$(TEST_DATABASE_URL) $(APP) npm test
+# Every `make test` gets its OWN throwaway database (name = TEST_DB + a random
+# suffix), dropped when the run ends. Tests insert data and never clean up, so a
+# shared persistent database grows until tests that assume a small table fail,
+# and a shared fixed-name database that is dropped per run would be wiped out
+# from under a second run started at the same time (your terminal + CI, say).
+# Your seeded dev database is never touched.
+TEST_RUN_DB := $(TEST_DB)_$(shell od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
+TEST_RUN_URL := postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(PG_SERVICE):5432/$(TEST_RUN_DB)
+
+test: ## Run the app's tests (Vitest) against a fresh, throwaway test database
+	@$(EXEC) $(PG_SERVICE) createdb -U $(POSTGRES_USER) $(TEST_RUN_DB)
+	@rc=0; \
+	$(EXEC) -e DATABASE_URL=$(TEST_RUN_URL) $(APP) npm run db:migrate && \
+	$(EXEC) -e DATABASE_URL=$(TEST_RUN_URL) $(APP) npm test || rc=$$?; \
+	$(EXEC) $(PG_SERVICE) psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -qc \
+		"DROP DATABASE IF EXISTS $(TEST_RUN_DB) WITH (FORCE)" >/dev/null; \
+	exit $$rc
 
 lint: ## Lint the app
 	$(EXEC) $(APP) npm run lint
