@@ -23,15 +23,15 @@
   height: 34px;
   padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 0;
+  background: #e4efff;
   color: var(--color-text);
   cursor: pointer;
   font-size: 0.85rem;
 }
 
 .ui-pagination__btn:hover:not(:disabled) {
-  background: var(--color-bg);
+  background: #d2e3ff;
 }
 
 .ui-pagination__btn:disabled {
@@ -41,7 +41,6 @@
 
 .ui-pagination__btn--active {
   background: var(--color-primary);
-  border-color: var(--color-primary);
   color: #fff;
 }
 

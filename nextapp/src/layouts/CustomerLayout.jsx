@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useBranding } from '../contexts/BrandingContext.jsx';
-import { BrandMark, Button } from '../components/ui/index.js';
+import { BrandMark, Button, CurrentYear } from '../components/ui/index.js';
 import '../styles/customer-pages.css';
 import './CustomerLayout.css';
 
@@ -21,7 +20,6 @@ const AUTHED_LINKS = [
 export function CustomerLayout({ children }) {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const { branding } = useBranding();
-  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Staff and customers sign in through the same /login page, so signed-in
@@ -37,12 +35,8 @@ export function CustomerLayout({ children }) {
   // brief gap. The slot keeps its width so the header does not reflow.
   const sessionKnown = !isLoading;
 
-  async function handleLogout() {
-    try {
-      await logout();
-    } finally {
-      router.push('/');
-    }
+  function handleLogout() {
+    return logout('/');
   }
 
   return (
@@ -50,7 +44,7 @@ export function CustomerLayout({ children }) {
       <header className="customer-header">
         <div className="customer-header__inner container">
           <Link href="/" className="customer-header__brand" onClick={() => setMenuOpen(false)}>
-            <BrandMark />
+            <BrandMark tone="light" />
           </Link>
 
           <button
@@ -115,11 +109,8 @@ export function CustomerLayout({ children }) {
 
       <footer className="customer-footer">
         <div className="container customer-footer__inner">
-          {/* Genuinely time-dependent text on a prerendered page, so the year can
-              lag the client's around New Year. No layout impact, so the documented
-              React escape hatch fits better than deferring it to a second pass. */}
-          <p suppressHydrationWarning>
-            &copy; {new Date().getFullYear()} {branding.agency_name}. All rights reserved.
+          <p>
+            &copy; <CurrentYear /> {branding.agency_name}. All rights reserved.
           </p>
           <p className="text-muted">Hotel booking and travel packages, all in one place.</p>
         </div>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Button, Card, Input, PlusCircleIcon, Select, Textarea, TrashIcon, useToast } from '../../components/ui/index.js';
+import { Button, Card, Icon, Input, PlusCircleIcon, Select, Textarea, TrashIcon, useToast } from '../../components/ui/index.js';
 import { createBookingAction, chargeBookingAction } from '../../server/actions/booking.actions.js';
 import { callAction } from '../../lib/callAction.js';
 import * as customerService from '../../services/customerService.js';
@@ -199,7 +199,9 @@ export function Checkout() {
     return (
       <div className="container page-section">
         <div className="empty-state">
-          <span className="empty-state__icon">🧳</span>
+          <span className="empty-state__icon">
+            <Icon name="luggage" />
+          </span>
           <p>No rooms selected yet. Start by searching for a hotel.</p>
           <Button onClick={() => router.push('/hotels')}>Browse Hotels</Button>
         </div>

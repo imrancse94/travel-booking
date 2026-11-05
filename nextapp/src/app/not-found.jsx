@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { BackButton, Icon } from '../components/ui/index.js';
 
 export const metadata = { title: 'Page not found' };
 
@@ -22,19 +22,14 @@ export default function NotFound() {
     <div className="container page-section">
       <div className="empty-state">
         <span className="empty-state__icon" aria-hidden="true">
-          🧭
+          <Icon name="explore" />
         </span>
         <h1 className="page-title">Page not found</h1>
         <p className="page-subtitle">
           The page you were looking for does not exist, or it may have moved.
         </p>
         <div className="not-found__actions">
-          <Link className="btn btn--primary" href="/">
-            <span className="btn__label">Back to home</span>
-          </Link>
-          <Link className="btn btn--secondary" href="/hotels">
-            <span className="btn__label">Browse hotels</span>
-          </Link>
+          <BackButton />
         </div>
       </div>
     </div>

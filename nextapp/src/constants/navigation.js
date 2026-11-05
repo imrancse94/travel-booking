@@ -1,25 +1,28 @@
-// Sidebar nav config for the admin UI (instructions.md section 38) and a
+// Sidebar nav config (`icon` is a Material Symbols name, rendered by <Icon />) for the admin UI (instructions.md section 38) and a
 // pure-function breadcrumb derivation used by AdminLayout's breadcrumb slot.
 // `permission: null` means "visible to any authenticated user" (Dashboard, Settings);
 // everything else is gated by the *.view permission for that resource.
 export const ADMIN_NAV_ITEMS = [
-  { label: 'Dashboard', to: '/admin/dashboard', icon: '\u{1F3E0}', permission: null },
-  { label: 'Bookings', to: '/admin/bookings', icon: '\u{1F4D6}', permission: 'bookings.view' },
-  { label: 'Hotels', to: '/admin/hotels', icon: '\u{1F3E8}', permission: 'hotels.view' },
-  { label: 'Services', to: '/admin/services', icon: '\u{1F6CE}️', permission: 'services.view' },
-  { label: 'Rooms', to: '/admin/rooms/room-types', icon: '\u{1F6CF}️', permission: 'room_types.view' },
-  { label: 'Customers', to: '/admin/customers', icon: '\u{1F465}', permission: 'customers.view' },
-  { label: 'Tours', to: '/admin/tours/packages', icon: '\u{1F9F3}', permission: 'tours.view' },
-  { label: 'Destinations', to: '/admin/destinations', icon: '\u{1F4CD}', permission: 'destinations.view' },
-  { label: 'Transport', to: '/admin/transport/vehicles', icon: '\u{1F690}', permission: 'transport.view' },
-  { label: 'Payments', to: '/admin/payments', icon: '\u{1F4B3}', permission: 'payments.view' },
-  { label: 'Invoices', to: '/admin/invoices', icon: '\u{1F9FE}', permission: 'invoices.view' },
-  { label: 'Commissions', to: '/admin/commissions', icon: '\u{1F4B0}', permission: 'commissions.view' },
-  { label: 'Reports', to: '/admin/reports', icon: '\u{1F4CA}', permission: 'reports.view' },
-  { label: 'Users', to: '/admin/users', icon: '\u{1F9D1}‍\u{1F4BC}', permission: 'users.view' },
-  { label: 'Roles & Permissions', to: '/admin/roles', icon: '\u{1F510}', permission: 'roles.view' },
-  { label: 'Activity Logs', to: '/admin/activity-logs', icon: '\u{1F4DC}', permission: 'activity_logs.view' },
-  { label: 'Settings', to: '/admin/settings', icon: '⚙️', permission: null },
+  { label: 'Dashboard', to: '/admin/dashboard', icon: 'dashboard', permission: null },
+  { label: 'Bookings', to: '/admin/bookings', icon: 'menu_book', permission: 'bookings.view' },
+  { label: 'Hotels', to: '/admin/hotels', icon: 'hotel', permission: 'hotels.view' },
+  { label: 'Services', to: '/admin/services', icon: 'room_service', permission: 'services.view' },
+  { label: 'Rooms', to: '/admin/rooms/room-types', icon: 'bed', permission: 'room_types.view' },
+  { label: 'Customers', to: '/admin/customers', icon: 'groups', permission: 'customers.view' },
+  { label: 'Tours', to: '/admin/tours/packages', icon: 'luggage', permission: 'tours.view' },
+  { label: 'Destinations', to: '/admin/destinations', icon: 'location_on', permission: 'destinations.view' },
+  { label: 'Transport', to: '/admin/transport/vehicles', icon: 'directions_bus', permission: 'transport.view' },
+  { label: 'Payments', to: '/admin/payments', icon: 'credit_card', permission: 'payments.view' },
+  { label: 'Invoices', to: '/admin/invoices', icon: 'receipt_long', permission: 'invoices.view' },
+  { label: 'Commissions', to: '/admin/commissions', icon: 'payments', permission: 'commissions.view' },
+  { label: 'Reports', to: '/admin/reports', icon: 'bar_chart', permission: 'reports.view' },
+  { label: 'Users', to: '/admin/users', icon: 'manage_accounts', permission: 'users.view' },
+  { label: 'Roles & Permissions', to: '/admin/roles', icon: 'admin_panel_settings', permission: 'roles.view' },
+  { label: 'Activity Logs', to: '/admin/activity-logs', icon: 'history', permission: 'activity_logs.view' },
+  { label: 'Settings', to: '/admin/settings', icon: 'settings', permission: null },
+  // `role` limits an item to that role (checked in AdminLayout; the page itself
+  // enforces the same rule on the server).
+  { label: 'Environment', to: '/admin/environment', icon: 'science', permission: null, role: 'Super Admin' },
 ];
 
 const SECTION_LABELS = {
@@ -45,6 +48,7 @@ const SECTION_LABELS = {
   roles: 'Roles & Permissions',
   settings: 'Settings',
   'activity-logs': 'Activity Logs',
+  environment: 'Environment',
   new: 'New',
   edit: 'Edit',
 };

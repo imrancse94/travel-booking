@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, DateRangePicker, DestinationField, Loader, OccupancyField, Select } from '../../components/ui/index.js';
+import { Button, DateRangePicker, Icon, DestinationField, Loader, OccupancyField, Select } from '../../components/ui/index.js';
 import * as roomService from '../../services/roomService.js';
 import { formatCurrency, formatDate } from '../../utils/format.js';
 
@@ -198,7 +198,9 @@ export function HotelSearch() {
         </div>
       ) : hotels.length === 0 ? (
         <div className="empty-state">
-          <span className="empty-state__icon">🏨</span>
+          <span className="empty-state__icon">
+              <Icon name="hotel" />
+            </span>
           <p>No hotels found for these dates. Try adjusting your search.</p>
         </div>
       ) : (
@@ -232,7 +234,9 @@ export function HotelSearch() {
                 {imageUrl ? (
                   <img className="hotel-card__image" src={imageUrl} alt={hotel.name} />
                 ) : (
-                  <div className="hotel-card__image hotel-card__image--placeholder">🏨</div>
+                  <div className="hotel-card__image hotel-card__image--placeholder">
+                  <Icon name="hotel" />
+                </div>
                 )}
                 <div className="hotel-card__body">
                   <div className="hotel-card__title-row">

@@ -21,6 +21,7 @@ import {
 import * as userService from '../../../services/userService.js';
 import { deleteUserAction } from '../../../server/actions/user.actions.js';
 import { callAction } from '../../../lib/callAction.js';
+import { ROLES } from '../../../server/config/permissions.js';
 
 /** Staff/agent user accounts list with role badges and row actions. */
 export function UserList() {
@@ -36,6 +37,10 @@ export function UserList() {
   // (see userController.list's excludeUserId) -- it manages itself elsewhere
   // (its own profile), not through this screen.
   const list = useResourceList({ fetcher: userService.list });
+
+  // The Super Admin account is permanent; the server refuses to delete it too.
+  const isSuperAdminRow = (row) =>
+    (row.roles || row.userRoles?.map((ur) => ur.role?.name) || []).includes(ROLES.SUPER_ADMIN);
 
   const columns = [
     {
@@ -66,7 +71,7 @@ export function UserList() {
               Edit
             </Button>
           )}
-          {canDelete && (
+          {canDelete && !isSuperAdminRow(row) && (
             <Button icon={<TrashIcon />} variant="danger" onClick={() => setPendingDelete(row)}>
               Delete
             </Button>

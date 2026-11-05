@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useBranding } from '../../contexts/BrandingContext.jsx';
+import { DEFAULT_LOGO_ICON } from '../../lib/appConfig.js';
 
 /**
  * Keeps the browser tab icon in sync with the branding context.
@@ -21,7 +22,7 @@ export function FaviconSync() {
   const { branding } = useBranding();
 
   useEffect(() => {
-    const href = branding.agency_favicon_url || '/favicon.svg';
+    const href = branding.agency_favicon_url || DEFAULT_LOGO_ICON;
     let link = document.querySelector("link[rel='icon']");
     if (!link) {
       link = document.createElement('link');

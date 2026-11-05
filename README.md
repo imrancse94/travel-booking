@@ -48,13 +48,8 @@ See [`documentation/architecture.md`](documentation/architecture.md) for the ful
 │   ├── Dockerfile
 │   └── package.json
 │
-├── .github/
-│   ├── workflows/
-│   │   ├── ci.yml            # test + build on every push/PR
-│   │   ├── _deploy.yml       # reusable build-push-deploy workflow
-│   │   ├── staging.yml       # deploys to staging on push to develop
-│   │   └── production.yml    # deploys to production on push to main
-│   └── scripts/smoke.sh      # end-to-end checks, run by `make smoke`
+├── scripts/
+│   └── smoke.sh              # end-to-end checks, run by `make smoke`
 ├── documentation/            # architecture, database, api, booking-flow, development, deployment
 ├── docker-compose.yml        # single `app` service + postgres/redis/pgadmin/mailpit
 ├── pgadmin.servers.json      # pgAdmin's pre-registered dev database connection

@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { BrandMark, Breadcrumbs } from '../components/ui/index.js';
+import { BrandMark, Breadcrumbs, CurrentYear, Icon } from '../components/ui/index.js';
 import { useBranding } from '../contexts/BrandingContext.jsx';
 import { ADMIN_NAV_ITEMS, getBreadcrumbTrail } from '../constants/navigation.js';
 import '../styles/admin-pages.css';
@@ -17,29 +17,26 @@ import './AdminLayout.css';
  * Nested pages render as {children}.
  */
 export function AdminLayout({ children }) {
-  const { user, hasPermission, logout } = useAuth();
+  const { user, hasPermission, hasRole, logout } = useAuth();
   const { branding } = useBranding();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  const router = useRouter();
 
-  const visibleNavItems = ADMIN_NAV_ITEMS.filter((item) => !item.permission || hasPermission(item.permission));
+  const visibleNavItems = ADMIN_NAV_ITEMS.filter(
+    (item) => (!item.permission || hasPermission(item.permission)) && (!item.role || hasRole(item.role))
+  );
   const breadcrumbItems = getBreadcrumbTrail(pathname);
   const userLabel = user ? (user.firstName ? `${user.firstName} ${user.lastName}` : user.email) : '';
 
-  async function handleLogout() {
-    try {
-      await logout();
-    } finally {
-      router.push('/login');
-    }
+  function handleLogout() {
+    return logout('/login');
   }
 
   return (
     <div className="admin-layout">
       <aside className={`admin-layout__sidebar ${sidebarOpen ? 'admin-layout__sidebar--open' : ''}`}>
         <div className="admin-layout__brand">
-          <BrandMark />
+          <BrandMark tone="light" />
         </div>
         <nav className="admin-layout__nav">
           {visibleNavItems.map((item) => (
@@ -52,7 +49,7 @@ export function AdminLayout({ children }) {
               onClick={() => setSidebarOpen(false)}
             >
               <span className="admin-layout__nav-icon" aria-hidden="true">
-                {item.icon}
+                <Icon name={item.icon} />
               </span>
               <span>{item.label}</span>
             </Link>
@@ -94,6 +91,12 @@ export function AdminLayout({ children }) {
         <main className="admin-layout__content">
           {children}
         </main>
+
+        <footer className="admin-layout__footer">
+          <span>
+            &copy; <CurrentYear /> {branding.agency_name}. All rights reserved.
+          </span>
+        </footer>
       </div>
     </div>
   );

@@ -14,16 +14,16 @@ import { loginUrlFrom } from '../../lib/navState.js';
  * protected page to a signed-out visitor before the redirect lands.
  */
 export function AuthGate({ children }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isSigningOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (isLoading || isAuthenticated) return;
+    if (isLoading || isAuthenticated || isSigningOut()) return;
     const qs = searchParams.toString();
     router.replace(loginUrlFrom(qs ? `${pathname}?${qs}` : pathname));
-  }, [isLoading, isAuthenticated, pathname, searchParams, router]);
+  }, [isLoading, isAuthenticated, isSigningOut, pathname, searchParams, router]);
 
   if (isLoading || !isAuthenticated) return null;
   return children;

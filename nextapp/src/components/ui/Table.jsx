@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from './Icon.jsx';
 import './Table.css';
 
 /**
@@ -25,6 +26,19 @@ export function Table({
     const isSame = sort?.key === col.key;
     const nextDir = isSame && sort.dir === 'asc' ? 'desc' : 'asc';
     onSortChange({ key: col.key, dir: nextDir });
+  }
+
+  // Nothing to show: no table at all (its header row over a single sentence
+  // looks broken), just a clear message.
+  if (!loading && rows.length === 0) {
+    return (
+      <div className="ui-table-empty" role="status">
+        <span className="ui-table-empty__icon" aria-hidden="true">
+          <Icon name="search_off" />
+        </span>
+        <p className="ui-table-empty__message">{emptyMessage}</p>
+      </div>
+    );
   }
 
   return (
@@ -64,14 +78,6 @@ export function Table({
                 ))}
               </tr>
             ))}
-
-          {!loading && rows.length === 0 && (
-            <tr>
-              <td colSpan={columns.length} className="ui-table__empty">
-                {emptyMessage}
-              </td>
-            </tr>
-          )}
 
           {!loading &&
             rows.map((row, i) => (

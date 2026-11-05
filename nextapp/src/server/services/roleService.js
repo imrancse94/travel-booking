@@ -17,6 +17,18 @@ export async function createRole({ name, description, permissionIds = [] }, acto
   return role;
 }
 
+/**
+ * Roles cannot be deleted through the app at all; this exists so any future
+ * delete path has to go through the same guard. System roles -- Super Admin
+ * above all -- are permanent.
+ */
+export async function assertRoleDeletable(id) {
+  const role = await roleRepository.findRoleById(id);
+  if (!role) throw new NotFoundError('Role not found');
+  if (role.isSystem) throw new ConflictError('System roles, including Super Admin, cannot be deleted');
+  return role;
+}
+
 export async function updateRolePermissions(id, permissionIds, actorId) {
   const role = await roleRepository.findRoleById(id);
   if (!role) throw new NotFoundError('Role not found');

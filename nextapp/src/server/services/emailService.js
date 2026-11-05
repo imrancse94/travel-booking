@@ -5,6 +5,7 @@ import { createConsoleEmailProvider } from '../integrations/email/providers/cons
 import { createSmtpEmailProvider } from '../integrations/email/providers/smtpProvider.js';
 import { emailContent, renderLayout } from '../integrations/email/content/index.js';
 import { getSettings } from './settingsService.js';
+import { APP_NAME } from '../../lib/appConfig.js';
 
 function resolveProvider() {
   // Tests must never put mail on the wire. Under Docker Compose EMAIL_PROVIDER
@@ -31,7 +32,7 @@ export async function sendTemplateEmail(templateName, to, data) {
   }
 
   const settings = await getSettings().catch(() => ({}));
-  const agencyName = settings.agency_name || 'Global Travel Agency';
+  const agencyName = settings.agency_name || APP_NAME;
   // Passed alongside the caller's own data so a template's subject line (only
   // welcome.js uses it today) can name the configured agency instead of a
   // hard-coded one.

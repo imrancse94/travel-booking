@@ -3,28 +3,37 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-soft: #eff6ff;
+  --color-primary: #1f7bff;
+  --color-primary-hover: #0f62dc;
+  --color-primary-soft: #eaf3ff;
   /* Deep end of the brand ramp, for large surfaces like the landing hero where
      the mid blue alone reads flat. */
-  --color-primary-deep: #12275c;
+  /* Brand palette, sampled from the logo artwork (public/logo.png). */
+  --color-navy: #00032d;
+  --color-primary-deep: var(--color-navy);
+  --color-navy-2: #0a1a5c;
+  --color-brand-sky: #38c8ff;
+  --color-accent: #f59e0b;
+  --color-accent-hover: #d98706;
+  --gradient-brand: linear-gradient(135deg, var(--color-brand-sky) 0%, var(--color-primary) 100%);
   --color-success: #16a34a;
   --color-success-hover: #15803d;
   --color-warning: #d97706;
   --color-danger: #dc2626;
-  --color-text: #111827;
-  --color-text-muted: #6b7280;
-  --color-border: #e5e7eb;
-  --color-bg: #f9fafb;
+  --color-text: #14204a;
+  --color-text-muted: #4f6591;
+  --color-border: #d9e7fb;
+  --color-bg: #ffffff;
+  /* White page; cards are white too and separate from it by border and shadow. */
+  --color-card: #ffffff;
   --color-surface: #ffffff;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
 
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-sm: 0 2px 4px rgba(15, 23, 60, 0.05), 0 8px 18px -8px rgba(31, 123, 255, 0.2);
+  --shadow-md: 0 4px 8px rgba(15, 23, 60, 0.06), 0 18px 36px -10px rgba(31, 123, 255, 0.3);
 
   --space-1: 4px;
   --space-2: 8px;
@@ -37,7 +46,8 @@
   --space-7: 48px;
   --space-8: 72px;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: var(--font-poppins), var(--font-inter), sans-serif;
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -56,6 +66,46 @@ body {
   color: var(--color-text);
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss03';
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3,
+.page-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  color: var(--color-navy);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #8aa0c6;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Buttons and nav links that are anchors should not underline on hover. */
+a.btn:hover,
+a[class*='nav'],
+a[class*='tab'],
+a[class*='brand'],
+a[class*='card']:hover {
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 a {
@@ -73,16 +123,14 @@ textarea {
 /*
  * Customer-side page measure (the admin console has its own shell).
  *
- * Wide by design: 1600px rather than 1200px, so large displays are not mostly
- * empty margin. No gutter at that size -- content runs to the edge of the
- * measure. The ladder below adds one back as the viewport narrows and flush
- * content would otherwise touch the screen edge.
+ * 1200px keeps line lengths and card grids comfortable on large displays;
+ * the gutter keeps content off the screen edge at every width.
  */
 .container {
   width: 100%;
-  max-width: 1600px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 0;
+  padding-inline: var(--space-6);
 }
 
 @media (max-width: 1024px) {
@@ -118,11 +166,12 @@ textarea {
   margin-bottom: var(--space-5);
 }
 
+
 .page-title {
   margin: 0;
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: var(--color-navy);
 }
 
 /* A detail page's title plus its record's status badge, side by side. */
@@ -150,6 +199,10 @@ textarea {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.recent-bookings {
   margin-bottom: var(--space-5);
 }
 
@@ -265,7 +318,9 @@ textarea {
 }
 
 .empty-state__icon {
-  font-size: 2rem;
+  font-size: 2.5rem;
+  line-height: 1;
+  color: var(--color-primary);
 }
 
 .error-state {

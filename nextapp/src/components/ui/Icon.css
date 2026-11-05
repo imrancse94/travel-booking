@@ -1,0 +1,19 @@
+.icon {
+  font-family: var(--font-icons), 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 1.25em;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  display: inline-block;
+  flex-shrink: 0;
+  user-select: none;
+  /* Ligature rendering: the glyph is picked from the icon's name. */
+  font-feature-settings: 'liga';
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}

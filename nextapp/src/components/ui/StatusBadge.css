@@ -11,22 +11,22 @@
 }
 
 .status-badge--success {
-  background: #dcfce7;
-  color: #166534;
+  background: #dff7e8;
+  color: #12643a;
 }
 .status-badge--warning {
-  background: #fef3c7;
-  color: #92400e;
+  background: #fff1d6;
+  color: #8a4b08;
 }
 .status-badge--danger {
-  background: #fee2e2;
-  color: #991b1b;
+  background: #fde6e6;
+  color: #9b1c1c;
 }
 .status-badge--info {
   background: var(--color-primary-soft);
   color: var(--color-primary-hover);
 }
 .status-badge--neutral {
-  background: var(--color-border);
-  color: var(--color-text-muted);
+  background: #e4efff;
+  color: #3f5688;
 }

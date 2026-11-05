@@ -1,6 +1,8 @@
 import { bcryptHasher } from '../lib/BcryptHasher.js';
 import { ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
 import * as userRepository from '../repositories/userRepository.js';
+import * as roleRepository from '../repositories/roleRepository.js';
+import { ROLES } from '../config/permissions.js';
 import { recordAudit } from './auditService.js';
 
 function sanitize(user) {
@@ -40,9 +42,29 @@ export async function createUser({ roleIds = [], password, ...data }, actorId) {
   return sanitize(user);
 }
 
+/** True when the user (as returned by userRepository.findById) holds the Super Admin role. */
+function holdsSuperAdmin(user) {
+  return Boolean(user?.userRoles?.some((ur) => ur.role?.name === ROLES.SUPER_ADMIN));
+}
+
 export async function updateUser(id, { roleIds, ...data }, actorId) {
   const existing = await userRepository.findById(id);
   if (!existing) throw new NotFoundError('User not found');
+
+  // The Super Admin account and its role are permanent: nobody can strip the
+  // role from it or deactivate it, so the system can never lose its only way
+  // to administer itself.
+  if (holdsSuperAdmin(existing)) {
+    if (roleIds) {
+      const superAdminRole = await roleRepository.findRoleByName(ROLES.SUPER_ADMIN);
+      if (!superAdminRole || !roleIds.includes(superAdminRole.id)) {
+        throw new ConflictError('The Super Admin role cannot be removed from a Super Admin');
+      }
+    }
+    if (data.status && data.status !== 'active') {
+      throw new ConflictError('A Super Admin account cannot be deactivated');
+    }
+  }
 
   await userRepository.updateUser(id, data);
   if (roleIds) {
@@ -63,6 +85,10 @@ export async function deleteUser(id, actorId) {
 
   const existing = await userRepository.findById(id);
   if (!existing) throw new NotFoundError('User not found');
+
+  if (holdsSuperAdmin(existing)) {
+    throw new ConflictError('A Super Admin account cannot be deleted');
+  }
 
   await userRepository.softDeleteUser(id);
   await recordAudit({ userId: actorId, action: 'user.deleted', entity: 'User', entityId: id });

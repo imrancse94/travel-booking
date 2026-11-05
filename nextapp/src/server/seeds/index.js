@@ -23,6 +23,8 @@ import {
 import * as userRepository from '../repositories/userRepository.js';
 import { bcryptHasher } from '../lib/BcryptHasher.js';
 import { PERMISSIONS, ROLES, ROLE_PERMISSIONS } from '../config/permissions.js';
+import { APP_NAME } from '../../lib/appConfig.js';
+import { DEMO_SUPER_ADMIN, DEMO_CUSTOMER } from '../../lib/demoCredentials.js';
 
 /**
  * Prisma's `upsert` with an empty `update` -- insert if missing, otherwise
@@ -82,13 +84,13 @@ async function seedPermissionsAndRoles() {
 
 async function seedAdminUser(superAdminRole) {
   console.log('Seeding development admin user...');
-  const email = 'admin@example.com';
-  const passwordHash = await bcryptHasher.hash('Admin@12345');
+  const email = DEMO_SUPER_ADMIN.email;
+  const passwordHash = await bcryptHasher.hash(DEMO_SUPER_ADMIN.password);
   const agencyId = '00000000-0000-0000-0000-000000000001';
 
   const { row: agency } = await findOrCreate(agencies, eq(agencies.id, agencyId), {
     id: agencyId,
-    name: 'Global Travel Agency',
+    name: APP_NAME,
     email: 'contact@globaltravel.example',
     phone: '+880-1000-000000',
     currency: 'USD',
@@ -318,12 +320,12 @@ async function seedDestinationsAndTours() {
 
 async function seedSampleCustomer(agency) {
   console.log('Seeding a sample customer...');
-  const email = 'customer@example.com';
+  const email = DEMO_CUSTOMER.email;
 
   const existing = await userRepository.findByEmail(email);
   if (existing) return existing;
 
-  const passwordHash = await bcryptHasher.hash('Customer@12345');
+  const passwordHash = await bcryptHasher.hash(DEMO_CUSTOMER.password);
   const [customerRole] = await db.select().from(roles).where(eq(roles.name, ROLES.CUSTOMER)).limit(1);
 
   // The user, their role and their customer profile in one transaction --
@@ -358,7 +360,7 @@ async function main() {
   console.log('\nSeed complete.');
   console.log('DEVELOPMENT ONLY credentials:');
   console.log('  Admin    -> admin@example.com / Admin@12345');
-  console.log('  Customer -> customer@example.com / Customer@12345');
+  console.log(`  Customer -> ${DEMO_CUSTOMER.email} / ${DEMO_CUSTOMER.password}`);
 }
 
 main()

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { APP_NAME } from '../../lib/appConfig.js';
 
 function required(name, fallback) {
   const value = process.env[name] ?? fallback;
@@ -47,9 +48,13 @@ export const env = {
     port: Number(process.env.SMTP_PORT || 587),
     user: process.env.SMTP_USER || '',
     password: process.env.SMTP_PASSWORD || '',
-    from: process.env.SMTP_FROM || 'Global Travel Agency <no-reply@example.com>',
+    from: process.env.SMTP_FROM || `${APP_NAME} <no-reply@example.com>`,
   },
   emailProvider: process.env.EMAIL_PROVIDER || 'console',
+
+  // Demo mode: shows the demo super-admin credentials on the login page.
+  // Off unless IS_DEMO=true. Never enable on a deployment with real data.
+  isDemo: process.env.IS_DEMO === 'true',
 
   bookingHoldMinutes: Number(process.env.BOOKING_HOLD_MINUTES || 10),
 

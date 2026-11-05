@@ -1,7 +1,16 @@
 import { Providers } from './providers.jsx';
 import { getSession } from '../lib/session.js';
+import { DEFAULT_LOGO_ICON } from '../lib/appConfig.js';
 import { getBranding } from '../lib/branding.js';
+import { Inter, Poppins } from 'next/font/google';
+import localFont from 'next/font/local';
 import '../styles/index.css';
+
+const poppins = Poppins({ subsets: ['latin'], weight: ['500', '600', '700'], display: 'swap', variable: '--font-poppins' });
+// Icon font (ligatures: <Icon name="home" />), committed under src/fonts as a
+// ~5 KB subset of Material Symbols. To add an icon, see components/ui/Icon.jsx.
+const icons = localFont({ src: '../fonts/material-symbols.woff2', display: 'block', variable: '--font-icons' });
+const inter = Inter({ subsets: ['latin'], display: 'swap', variable: '--font-inter' });
 
 /**
  * The browser tab follows the agency name configured in Settings.
@@ -16,7 +25,7 @@ export async function generateMetadata() {
   return {
     title: { default: branding.agency_name, template: `%s · ${branding.agency_name}` },
     description: 'Hotel booking and travel packages, all in one place.',
-    icons: { icon: branding.agency_favicon_url || '/favicon.svg' },
+    icons: { icon: branding.agency_favicon_url || DEFAULT_LOGO_ICON },
   };
 }
 
@@ -46,8 +55,8 @@ export default async function RootLayout({ children }) {
   const [session, branding] = await Promise.all([getSession(), getBranding()]);
 
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" className={`${inter.variable} ${poppins.variable} ${icons.variable}`} suppressHydrationWarning>
+      <body suppressHydrationWarning>
         <Providers session={session} branding={branding}>
           {children}
         </Providers>

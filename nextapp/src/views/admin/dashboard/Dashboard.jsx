@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card, StatCard, StatusBadge, Table, Loader } from '../../../components/ui/index.js';
+import { Card, Icon, StatCard, StatusBadge, Table, Loader } from '../../../components/ui/index.js';
 import { LineChartCard, BarChartCard, PieChartCard } from '../../../components/charts/index.js';
 import * as dashboardService from '../../../services/dashboardService.js';
 import { formatCurrency, formatDate } from '../../../utils/format.js';
@@ -74,17 +74,21 @@ export function Dashboard() {
       </div>
 
       <div className="stat-cards">
-        <StatCard label="Total Bookings" value={cards.totalBookings ?? 0} icon="📖" />
-        <StatCard label="Today's Bookings" value={cards.todaysBookings ?? 0} icon="📅" />
-        <StatCard label="Upcoming Check-ins" value={cards.upcomingCheckIns ?? 0} icon="🛎️" />
-        <StatCard label="Upcoming Check-outs" value={cards.upcomingCheckOuts ?? 0} icon="🚪" />
-        <StatCard label="Revenue" value={formatCurrency(cards.revenue)} tone="success" icon="💵" />
-        <StatCard label="Pending Payments" value={formatCurrency(cards.pendingPayments)} tone="warning" icon="⏳" />
-        <StatCard label="Available Rooms" value={cards.availableRooms ?? 0} tone="success" icon="🟢" />
-        <StatCard label="Occupied Rooms" value={cards.occupiedRooms ?? 0} icon="🛏️" />
-        <StatCard label="Customers" value={cards.customers ?? 0} icon="👥" />
-        <StatCard label="Tour Bookings" value={cards.tourBookings ?? 0} icon="🧳" />
+        <StatCard label="Total Bookings" value={cards.totalBookings ?? 0} icon={<Icon name="menu_book" />} />
+        <StatCard label="Today's Bookings" value={cards.todaysBookings ?? 0} icon={<Icon name="calendar_today" />} />
+        <StatCard label="Upcoming Check-ins" value={cards.upcomingCheckIns ?? 0} icon={<Icon name="room_service" />} />
+        <StatCard label="Upcoming Check-outs" value={cards.upcomingCheckOuts ?? 0} icon={<Icon name="meeting_room" />} />
+        <StatCard label="Revenue" value={formatCurrency(cards.revenue)} tone="success" icon={<Icon name="payments" />} />
+        <StatCard label="Pending Payments" value={formatCurrency(cards.pendingPayments)} tone="warning" icon={<Icon name="hourglass_top" />} />
+        <StatCard label="Available Rooms" value={cards.availableRooms ?? 0} tone="success" icon={<Icon name="check_circle" />} />
+        <StatCard label="Occupied Rooms" value={cards.occupiedRooms ?? 0} icon={<Icon name="bed" />} />
+        <StatCard label="Customers" value={cards.customers ?? 0} icon={<Icon name="groups" />} />
+        <StatCard label="Tour Bookings" value={cards.tourBookings ?? 0} icon={<Icon name="luggage" />} />
       </div>
+
+      <Card title="Recent Bookings" className="recent-bookings">
+        <Table columns={RECENT_BOOKINGS_COLUMNS} rows={recentBookings} emptyMessage="No recent bookings." />
+      </Card>
 
       <div className="charts-grid">
         <Card title="Revenue Over Time">
@@ -140,10 +144,6 @@ export function Dashboard() {
           />
         </Card>
       </div>
-
-      <Card title="Recent Bookings">
-        <Table columns={RECENT_BOOKINGS_COLUMNS} rows={recentBookings} emptyMessage="No recent bookings." />
-      </Card>
     </div>
   );
 }

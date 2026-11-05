@@ -1,0 +1,88 @@
+# Coolify deployment: Build Pack = "Docker Compose", Compose file =
+# /docker-compose.coolify.yml. Set the variables below in Coolify's
+# Environment Variables tab. Coolify's Traefik proxy terminates TLS and routes
+# the domain you assign to the `app` service (set its port to 5173).
+#
+# Required: JWT_SECRET, JWT_REFRESH_SECRET, POSTGRES_PASSWORD, PUBLIC_URL
+# (the SERVICE_FQDN_APP_5173 magic variable gives Coolify-generated domains).
+
+services:
+  app:
+    build:
+      context: ./nextapp
+      target: production
+    restart: unless-stopped
+    environment:
+      SERVICE_FQDN_APP_5173: ''
+      NODE_ENV: production
+      IS_DEMO: ${IS_DEMO:-false}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-booking_user}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-booking_db}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-25}
+      REDIS_URL: redis://redis:6379
+      PUBLIC_URL: ${PUBLIC_URL:-${SERVICE_FQDN_APP}}
+      JWT_SECRET: ${SERVICE_PASSWORD_JWT}
+      JWT_REFRESH_SECRET: ${SERVICE_PASSWORD_JWTREFRESH}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      BOOKING_HOLD_MINUTES: ${BOOKING_HOLD_MINUTES:-10}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      FILE_STORAGE_DRIVER: ${FILE_STORAGE_DRIVER:-local}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-mock}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      SMS_PROVIDER: ${SMS_PROVIDER:-none}
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-none}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:5173/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-booking_user}
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+      POSTGRES_DB: ${POSTGRES_DB:-booking_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-booking_user} -d ${POSTGRES_DB:-booking_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  uploads:
+  pgdata:
+  redisdata:

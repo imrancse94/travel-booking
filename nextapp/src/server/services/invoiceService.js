@@ -10,6 +10,7 @@ import { getSettings } from './settingsService.js';
 import { recordAudit } from './auditService.js';
 import { PdfBuilder } from '../lib/PdfBuilder.js';
 import * as invoiceRepository from '../repositories/invoiceRepository.js';
+import { APP_NAME } from '../../lib/appConfig.js';
 
 export async function listInvoices(query) {
   const { items, total } = await invoiceRepository.list(query);
@@ -116,7 +117,7 @@ function buildInvoicePdfBuffer(invoice, settings) {
   const booking = invoice.booking;
   const builder = new PdfBuilder();
 
-  builder.heading(settings.agency_name || 'Global Travel Agency', { size: 18 });
+  builder.heading(settings.agency_name || APP_NAME, { size: 18 });
   if (settings.agency_address) {
     builder.font('Helvetica').fontSize(9).fillColor('#6b7280').text(settings.agency_address);
   }

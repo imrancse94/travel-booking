@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Button, Card, Loader, StatusBadge, Table } from '../../components/ui/index.js';
+import { Button, Card, Icon, Loader, StatusBadge, Table } from '../../components/ui/index.js';
 import * as bookingService from '../../services/bookingService.js';
 import { formatCurrency, formatDate } from '../../utils/format.js';
 
@@ -51,7 +51,7 @@ export function BookingConfirmation() {
     <div className="container page-section">
       <Card>
         <div className="confirmation-banner">
-          <div className="confirmation-banner__icon">{isConfirmed ? '✅' : '⏳'}</div>
+          <div className="confirmation-banner__icon"><Icon name={isConfirmed ? 'check_circle' : 'hourglass_top'} /></div>
           <h1 className="page-title" style={{ marginTop: 'var(--space-3)' }}>
             {isConfirmed ? 'Booking Confirmed!' : 'Booking Received'}
           </h1>

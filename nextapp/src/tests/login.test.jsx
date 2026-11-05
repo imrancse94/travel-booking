@@ -54,7 +54,7 @@ describe('Login page', () => {
     await waitFor(() => expect(getUser()).toEqual(CUSTOMER_USER));
   });
 
-  it('redirects to the home page after a successful login', async () => {
+  it('sends a customer to My Bookings after a successful login', async () => {
     authActions.loginAction.mockResolvedValue(successResult(CUSTOMER_USER));
     const user = userEvent.setup();
     const { router } = renderLogin();
@@ -63,7 +63,19 @@ describe('Login page', () => {
     await user.type(screen.getByLabelText(/password/i), 'Customer@12345');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/'));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/my-bookings'));
+  });
+
+  it('sends staff to the admin dashboard after a successful login', async () => {
+    authActions.loginAction.mockResolvedValue(successResult({ ...CUSTOMER_USER, roles: ['Super Admin'] }));
+    const user = userEvent.setup();
+    const { router } = renderLogin();
+
+    await user.type(screen.getByLabelText(/email/i), 'admin@example.com');
+    await user.type(screen.getByLabelText(/password/i), 'Admin@12345');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/admin/dashboard'));
   });
 
   it('returns the user to the page that sent them to login', async () => {

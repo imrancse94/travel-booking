@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Card, Input, Loader, Modal, Pagination, Select, StatusBadge, Table, useToast } from '../../../components/ui/index.js';
+import { Card, Icon, Input, Loader, Modal, Pagination, Select, StatusBadge, Table, useToast } from '../../../components/ui/index.js';
 import * as activityLogService from '../../../services/activityLogService.js';
 import { useDebounce } from '../../../hooks/useDebounce.js';
 import { toastFromApiError } from '../../../utils/formErrors.js';
@@ -181,7 +181,7 @@ export function ActivityLogList() {
       ) : entries.length === 0 ? (
         <div className="empty-state">
           <span className="empty-state__icon" aria-hidden="true">
-            📜
+            <Icon name="history" />
           </span>
           <p>No activity recorded for these filters.</p>
         </div>

@@ -5,6 +5,12 @@ const nextConfig = {
   // image runs. Without this the image would need the full dependency tree.
   output: 'standalone',
 
+  // Dev server blocks /_next/* (JS chunks, HMR) for any origin other than
+  // localhost, so the page renders but never hydrates -- dead date pickers,
+  // buttons, everything. lvh.me and *.lvh.me resolve to 127.0.0.1 and are handy
+  // for testing subdomains/cookies. Dev-only; has no effect in production.
+  allowedDevOrigins: ['lvh.me', '*.lvh.me'],
+
   // These ship native bindings / dynamic requires that Next's bundler can't
   // trace (pdfkit's font engine, fontkit, pulls in @swc/helpers exports that
   // don't exist in the version webpack resolves them to when bundled; sharp

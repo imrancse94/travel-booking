@@ -10,6 +10,7 @@ import { saveUserAction } from '../../../server/actions/user.actions.js';
 import { callAction } from '../../../lib/callAction.js';
 import { ENTITY_STATUS_OPTIONS } from '../../../constants/options.js';
 import { apiFieldErrors, toastFromApiError, toastFromFieldErrors } from '../../../utils/formErrors.js';
+import { ROLES } from '../../../server/config/permissions.js';
 
 const EMPTY_FORM = { firstName: '', lastName: '', email: '', phone: '', password: '', status: 'active' };
 
@@ -22,6 +23,8 @@ export function UserForm() {
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [roles, setRoles] = useState([]);
+  // A Super Admin keeps that role and stays active; the server enforces it too.
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [selectedRoleIds, setSelectedRoleIds] = useState([]);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
@@ -44,6 +47,7 @@ export function UserForm() {
         setForm({ ...EMPTY_FORM, ...nullsToEmptyStrings(user), password: '' });
         const ids = (user.userRoles || []).map((ur) => ur.roleId || ur.role?.id).filter(Boolean);
         setSelectedRoleIds(ids);
+        setIsSuperAdmin((user.userRoles || []).some((ur) => ur.role?.name === ROLES.SUPER_ADMIN));
       })
       .catch((err) => show(toastFromApiError(err, 'Could not load this user'), 'error'))
       .finally(() => setLoading(false));
@@ -136,6 +140,7 @@ export function UserForm() {
               label="Status"
               value={form.status}
               onChange={(e) => setField('status', e.target.value)}
+              disabled={isSuperAdmin}
               options={ENTITY_STATUS_OPTIONS}
             />
           </div>
@@ -148,6 +153,7 @@ export function UserForm() {
                   <input
                     type="checkbox"
                     checked={selectedRoleIds.includes(role.id)}
+                    disabled={isSuperAdmin && role.name === ROLES.SUPER_ADMIN}
                     onChange={() => toggleRole(role.id)}
                   />
                   {role.name}

@@ -172,9 +172,9 @@ lint: ## Lint the app
 lint-fix: ## Auto-fix lint errors
 	$(EXEC) $(APP) npm run lint:fix
 
-smoke: ## End-to-end smoke test against the running stack (same script CI runs)
+smoke: ## End-to-end smoke test against the running stack
 	@API_URL="$(API_URL)" WEB_URL="$(WEB_URL)" MAIL_URL="$(MAIL_URL)" PGADMIN_URL="$(PGADMIN_URL)" \
-		./.github/scripts/smoke.sh
+		./scripts/smoke.sh
 
 ci: lint test ## What CI runs: lint + tests
 

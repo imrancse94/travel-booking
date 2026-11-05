@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginAction, logoutAction } from '../server/actions/auth.actions.js';
 import { callAction } from '../lib/callAction.js';
@@ -25,6 +25,9 @@ export function SessionProvider({ session = null, children }) {
   const [user, setUser] = useState(session);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  // Set while a sign-out is navigating away, so AuthGate does not fire its own
+  // competing redirect the moment `user` becomes null.
+  const signingOutRef = useRef(false);
 
   const login = useCallback(
     async (email, password) => {
@@ -32,6 +35,7 @@ export function SessionProvider({ session = null, children }) {
       try {
         const { user: nextUser, accessToken } = await callAction(loginAction, email, password);
         setAccessToken(accessToken);
+        signingOutRef.current = false;
         setUser(nextUser);
         router.refresh();
         return nextUser;
@@ -42,17 +46,28 @@ export function SessionProvider({ session = null, children }) {
     [router]
   );
 
-  const logout = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      await callAction(logoutAction);
-    } finally {
-      clearAccessToken();
-      setUser(null);
-      setIsLoading(false);
-      router.refresh();
-    }
-  }, [router]);
+  /**
+   * Signs out and navigates to `redirectTo` as the ONE navigation. Previously
+   * this also called router.refresh() while the caller pushed a route and
+   * AuthGate replaced another; the refresh was cancelled mid-stream and React
+   * threw "Cannot close a CLOSED writable stream". Navigating re-renders the
+   * server components against the cleared cookies anyway.
+   */
+  const logout = useCallback(
+    async (redirectTo = '/login') => {
+      signingOutRef.current = true;
+      setIsLoading(true);
+      try {
+        await callAction(logoutAction);
+      } finally {
+        clearAccessToken();
+        setUser(null);
+        setIsLoading(false);
+        router.replace(redirectTo);
+      }
+    },
+    [router]
+  );
 
   const value = useMemo(
     () => ({
@@ -61,6 +76,7 @@ export function SessionProvider({ session = null, children }) {
       isAuthenticated: Boolean(user),
       login,
       logout,
+      isSigningOut: () => signingOutRef.current,
       hasPermission: (permission) => {
         if (!user) return false;
         if (user.roles?.includes('Super Admin')) return true;

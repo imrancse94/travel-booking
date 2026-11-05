@@ -1,9 +1,10 @@
 import { renderHeader } from './partials/header.js';
 import { renderFooter } from './partials/footer.js';
+import { APP_NAME } from '../../../../lib/appConfig.js';
 
 // Every outgoing email is wrapped in this single layout, so branding
 // (organization name/logo) and footer copy only ever need to change in one place.
-export function renderLayout({ title, bodyHtml, agencyName = 'Global Travel Agency', logoUrl = null }) {
+export function renderLayout({ title, bodyHtml, agencyName = APP_NAME, logoUrl = null }) {
   return `<!doctype html>
 <html>
   <body style="margin:0;padding:24px;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">

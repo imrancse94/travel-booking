@@ -1,3 +1,4 @@
+import { APP_NAME } from './appConfig.js';
 /**
  * Split out of lib/branding.js so client components (BrandingContext.jsx)
  * can import just this constant without pulling in getBranding() and,
@@ -7,7 +8,7 @@
  * settings service directly (Next then tries to bundle `pg` for the browser).
  */
 export const DEFAULT_BRANDING = {
-  agency_name: 'Global Travel Agency',
+  agency_name: APP_NAME,
   agency_logo_url: null,
   agency_favicon_url: null,
   currency: 'USD',

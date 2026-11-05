@@ -8,9 +8,10 @@
 }
 
 .form-field__label {
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   font-weight: 600;
-  color: var(--color-text);
+  letter-spacing: 0.005em;
+  color: var(--color-navy);
 }
 
 .form-field__required {
@@ -22,10 +23,10 @@
   width: 100%;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
+  border: 1px solid #c9dcf7;
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -44,9 +45,9 @@
 }
 
 .form-field__control:disabled {
-  background: #d2d2d2;
-  border-color: #d2d2d2;
-  color: #4b5563;
+  background: #e8f1ff;
+  border-color: #d5e5fb;
+  color: #6a80a9;
   opacity: 1;
   cursor: not-allowed;
 }

@@ -22,7 +22,7 @@
 }
 
 .occupancy__trigger:hover {
-  border-color: #cbd5e1;
+  border-color: #b5cff5;
 }
 
 .occupancy__trigger:focus-visible,
@@ -106,7 +106,7 @@
 }
 
 .occupancy__step:disabled {
-  color: #cbd5e1;
+  color: #b5cff5;
   cursor: not-allowed;
 }
 

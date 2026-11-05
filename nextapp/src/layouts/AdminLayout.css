@@ -7,8 +7,8 @@
 .admin-layout__sidebar {
   width: 240px;
   flex-shrink: 0;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
+  background: var(--color-navy);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   position: sticky;
@@ -21,8 +21,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-5) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .admin-layout__brand-mark {
@@ -58,24 +58,28 @@
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  color: var(--color-text);
+  color: rgba(255, 255, 255, 0.72);
   font-size: 0.88rem;
   font-weight: 500;
 }
 
 .admin-layout__nav-link:hover {
-  background: var(--color-bg);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .admin-layout__nav-link--active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary-hover);
+  background: var(--gradient-brand);
+  color: #fff;
   font-weight: 600;
 }
 
 .admin-layout__nav-icon {
-  width: 20px;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  font-size: 1.15rem;
 }
 
 .admin-layout__scrim {
@@ -94,8 +98,9 @@
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(180%) blur(10px);
+  box-shadow: 0 1px 0 #d9e7fb, 0 6px 18px -10px rgba(15, 23, 60, 0.18);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -108,9 +113,9 @@
   gap: 4px;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--color-border);
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: #e4efff;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -135,30 +140,40 @@
 }
 
 .admin-layout__user-name {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #e8f1ff;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-navy);
 }
 
 .admin-layout__logout {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 0;
+  background: #e4efff;
   cursor: pointer;
   font-size: 0.82rem;
   font-weight: 600;
 }
 .admin-layout__logout:hover {
-  background: var(--color-bg);
+  background: #d2e3ff;
 }
 
 .admin-layout__breadcrumb-bar {
-  padding: var(--space-3) var(--space-5) 0;
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-6) 0;
 }
 
 .admin-layout__content {
   flex: 1;
-  padding: var(--space-5);
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-6) var(--space-7);
   min-width: 0;
 }
 
@@ -201,4 +216,25 @@
   .admin-layout__user-name {
     display: none;
   }
+}
+
+/* Footer: .admin-layout__main is a flex column and the content area grows, so on
+   a short page the footer rests at the bottom of the viewport instead of
+   floating under the content; on a long page it simply follows the content. */
+.admin-layout__footer {
+  /* Pinned to the bottom of the viewport while scrolling; rests at the bottom of
+     a short page. */
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  box-shadow: 0 -6px 18px -12px rgba(15, 23, 60, 0.25);
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid #d9e7fb;
+  background: var(--color-surface);
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }

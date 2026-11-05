@@ -1,4 +1,5 @@
-export function welcome({ firstName, agencyName = 'Global Travel Agency' }) {
+import { APP_NAME } from '../../../../lib/appConfig.js';
+export function welcome({ firstName, agencyName = APP_NAME }) {
   return {
     subject: `Welcome to ${agencyName}`,
     title: 'Welcome!',

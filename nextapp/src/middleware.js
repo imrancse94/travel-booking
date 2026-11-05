@@ -116,5 +116,5 @@ export async function middleware(req) {
 
 export const config = {
   // Skips static assets and image optimisation, which never need a session.
-  matcher: ['/((?!_next/static|_next/image|favicon.svg|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|jpg|jpeg|webp|ico)$).*)'],
 };

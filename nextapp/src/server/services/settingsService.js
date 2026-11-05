@@ -1,13 +1,14 @@
 import { and, asc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { agencies, settings } from '../db/schema.js';
+import { APP_NAME } from '../../lib/appConfig.js';
 
 const DEFAULTS = {
   tax_rate_percent: 0,
   default_commission_percent: 0,
   currency: 'USD',
   timezone: 'UTC',
-  agency_name: 'Global Travel Agency',
+  agency_name: APP_NAME,
   agency_logo_url: null,
   agency_favicon_url: null,
   cancellation_free_days: 7,

@@ -28,6 +28,9 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY . .
 RUN npm run build
+# Runtime-only dependency tree, used by the production stage so the same image
+# can run migrations (drizzle-orm, pg, dotenv...) before starting the server.
+RUN npm prune --omit=dev
 
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS production
@@ -46,12 +49,21 @@ WORKDIR /app
 COPY --from=build --chown=appuser:appgroup /app/.next/standalone ./
 COPY --from=build --chown=appuser:appgroup /app/.next/static ./.next/static
 COPY --from=build --chown=appuser:appgroup /app/public ./public
+# Full prod node_modules + server code so `node src/server/db/migrate.js` works
+# at container start (standalone's traced tree omits the migration script).
+COPY --from=build --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=build --chown=appuser:appgroup /app/src/server ./src/server
+COPY --from=build --chown=appuser:appgroup /app/src/lib ./src/lib
+COPY --from=build --chown=appuser:appgroup /app/package.json ./package.json
 
 # UPLOAD_ROOT (server/services/uploadService.js) is process.cwd()/uploads --
 # server.js runs from /app, so local-driver uploads need this directory to
 # exist and be writable by the non-root user before the app tries to.
-RUN mkdir -p ./uploads && chown appuser:appgroup ./uploads
+RUN mkdir -p ./uploads ./logs && chown appuser:appgroup ./uploads ./logs
 
 USER appuser
 EXPOSE 5173
-CMD ["node", "server.js"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+  CMD node -e "fetch('http://localhost:5173/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# Apply pending migrations, then start. Migrations are idempotent.
+CMD ["sh", "-c", "node src/server/db/migrate.js && node server.js"]
