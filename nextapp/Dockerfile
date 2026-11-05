@@ -56,6 +56,7 @@ COPY --from=build --chown=appuser:appgroup /app/src/server ./src/server
 COPY --from=build --chown=appuser:appgroup /app/src/lib ./src/lib
 COPY --from=build --chown=appuser:appgroup /app/package.json ./package.json
 COPY --from=build --chown=appuser:appgroup /app/healthcheck.js ./healthcheck.js
+COPY --from=build --chown=appuser:appgroup --chmod=755 /app/start.sh ./start.sh
 
 # UPLOAD_ROOT (server/services/uploadService.js) is process.cwd()/uploads --
 # server.js runs from /app, so local-driver uploads need this directory to
@@ -67,5 +68,5 @@ EXPOSE 5173
 # Checks the app, its database and Redis (see healthcheck.js).
 HEALTHCHECK --interval=15s --timeout=6s --start-period=40s --retries=5 \
   CMD ["node", "healthcheck.js"]
-# Apply pending migrations, then start. Migrations are idempotent.
-CMD ["sh", "-c", "node src/server/db/migrate.js && node server.js"]
+# Migrate, seed demo data when IS_DEMO=true, then start (see start.sh).
+CMD ["./start.sh"]

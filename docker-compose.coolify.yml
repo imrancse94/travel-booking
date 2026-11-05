@@ -15,7 +15,10 @@ services:
     environment:
       SERVICE_FQDN_APP_5173: ''
       NODE_ENV: production
-      IS_DEMO: ${IS_DEMO:-false}
+      # Demo mode: seeds demo data on start and shows the demo accounts on the login
+      # page. Defaults to ON for this server; set IS_DEMO=false in Coolify to turn it
+      # off (the data already loaded stays).
+      IS_DEMO: ${IS_DEMO:-true}
       DATABASE_URL: postgresql://${POSTGRES_USER:-booking_user}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-booking_db}
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-25}
       REDIS_URL: redis://redis:6379
