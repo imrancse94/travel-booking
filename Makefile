@@ -203,6 +203,21 @@ local-install: ## npm ci in nextapp on the host
 local-app: ## Run the app on the host (point DATABASE_URL/REDIS_URL at localhost first)
 	cd nextapp && npm run db:migrate && npm run dev
 
+##@ Database transfer
+
+BACKUP_DIR ?= resources/backups
+BACKUP_FILE ?= $(BACKUP_DIR)/booking-data-$(shell date +%Y%m%d-%H%M%S).sql
+
+db-export: ## Dump local DATA (no schema) to resources/backups/, ready to import on the server
+	@# Data only, public schema only: the server creates its own schema by running
+	@# migrations on first start, and this leaves its drizzle migration ledger alone.
+	@# --disable-triggers lets rows load in any order despite foreign keys.
+	@mkdir -p $(BACKUP_DIR)
+	$(EXEC) $(PG_SERVICE) pg_dump -U $(POSTGRES_USER) -d $(POSTGRES_DB) \
+		--data-only --schema=public --disable-triggers --no-owner --no-privileges > $(BACKUP_FILE)
+	@echo "Wrote $(BACKUP_FILE). It contains password hashes and customer data: do not commit or share it."
+	@echo "Import it on the server: see documentation/deployment.md (Importing local data)."
+
 ##@ Cleanup
 
 clean: ## DESTRUCTIVE: remove containers, named volumes (database included) and orphans
@@ -215,6 +230,6 @@ prune: ## Reclaim disk: prune dangling Docker build cache and images
 .PHONY: help setup env urls up dev rebuild deps-refresh down stop start restart restart-app \
 	ps logs logs-app health sh \
 	psql redis-cli pgadmin migrate migrate-new db-pull migrate-reset studio seed db-reset \
-	test smoke lint lint-fix ci \
+	test smoke lint lint-fix ci db-export \
 	build local-deps local-install local-app \
 	clean prune

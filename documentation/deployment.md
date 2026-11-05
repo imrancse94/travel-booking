@@ -226,3 +226,44 @@ key in `~/.ssh/authorized_keys`, and a security group allowing 80 and 22.
 - There is a brief interruption during `up -d` while containers restart. Zero
   downtime would need a second instance and a load balancer, which is outside
   the single-EC2 constraint this deployment is built around.
+
+## 6. Importing local data into the server (Coolify)
+
+`make db-export` writes the **data** of your local database (no schema) to
+`resources/backups/booking-data-<timestamp>.sql`. The server creates its own
+schema when the app starts (migrations run on boot), so the import only has to
+load rows. A dump made this way was tested by loading it into a freshly migrated
+empty database: every table's row count matched.
+
+1. **Deploy first.** Let Coolify start the stack once so the app has run its
+   migrations. The tables exist but are empty (nothing is seeded on the server).
+2. **Export locally:** `make db-export`.
+3. **Copy it to the server:**
+   `scp resources/backups/booking-data-<timestamp>.sql user@your-server:/tmp/`
+4. **Load it into the Postgres container** (Coolify names containers with a
+   generated suffix, so look it up first):
+   ```sh
+   docker ps --format '{{.Names}}' | grep postgres
+   docker exec -i <postgres-container> psql -U booking_user -d booking_db \
+     -v ON_ERROR_STOP=1 < /tmp/booking-data-<timestamp>.sql
+   ```
+   Use the `POSTGRES_USER` / `POSTGRES_DB` you set in Coolify if they differ. The
+   dump disables triggers while loading, which the official Postgres image's
+   superuser allows. `ON_ERROR_STOP` makes it stop at the first error.
+5. **Delete the dump** from `/tmp` and from your machine when done.
+6. **Uploaded files are separate.** Images and logos live in `resources/uploads`
+   locally and in the `uploads` volume on the server; copy those across too if
+   you use the local storage driver.
+
+Things to know before importing:
+
+- The import expects **empty tables**. If the server database already holds data
+  (for example someone ran the seed), loading will fail on duplicate keys.
+  Empty the tables first or recreate the database.
+- Your local data includes the **demo accounts**
+  (`admin@example.com` / `Admin@12345`, `customer@example.com` /
+  `Customer@12345`). Importing them puts those known passwords on a public
+  server. Change the admin password (or replace the account) straight after
+  importing, and keep `IS_DEMO=false`.
+- The dump contains password hashes and customer data: treat it as sensitive and
+  never commit it (`resources/` is gitignored).
