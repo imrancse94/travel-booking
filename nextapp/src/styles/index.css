@@ -81,7 +81,9 @@ h3,
   font-weight: 600;
   letter-spacing: -0.015em;
   line-height: 1.25;
-  color: var(--color-navy);
+  /* Inherit, so a heading on a dark surface (the hero) stays light; light
+     surfaces already get the navy text colour from the body. */
+  color: inherit;
 }
 
 input::placeholder,

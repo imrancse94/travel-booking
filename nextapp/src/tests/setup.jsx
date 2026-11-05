@@ -26,6 +26,18 @@ vi.mock('next/link', async () => {
   };
 });
 
+// The destination typeahead loads its catalogue on mount. Without this every test
+// that renders it made a real HTTP request from jsdom, which fails (no server)
+// and printed an AggregateError to stderr. An empty catalogue keeps the field
+// inert; a test that cares about suggestions can mock the service itself.
+vi.mock('../services/destinationService.js', () => ({
+  list: vi.fn().mockResolvedValue({ data: [] }),
+  getById: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
+}));
+
 afterEach(() => {
   resetNavigation();
   // API/integration tests run in the Node environment (no `window`), so this

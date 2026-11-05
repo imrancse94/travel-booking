@@ -24,7 +24,7 @@
  *
  * Regenerate with: npm run db:pull
 */
-import { pgTable, varchar, timestamp, text, integer, jsonb, uniqueIndex, foreignKey, boolean, index, numeric, date, pgEnum } from "drizzle-orm/pg-core"
+import { pgTable, timestamp, text, integer, jsonb, uniqueIndex, foreignKey, boolean, index, numeric, date, pgEnum } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 import { randomUUID } from "node:crypto"
 
