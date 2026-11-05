@@ -2,37 +2,35 @@
 
 ## 1. Conventions
 
-- **Base path**: every route is mounted under `/api/v1` (`env.apiPrefix`, see `backend/src/app.js` and `backend/src/config/env.js`). For example the booking list endpoint is `GET /api/v1/bookings`.
-- **Response envelope** (`backend/src/utils/apiResponse.js`):
+- **Base path**: the API is served from the same origin as the UI — there is no separate backend host. Every route is mounted under `/api/v1` as a Next.js Route Handler (`nextapp/src/app/api/v1/**/route.js`). For example the booking list endpoint is `GET /api/v1/bookings`, which in local dev is `http://localhost:5173/api/v1/bookings` and in the browser is simply the relative path `/api/v1/bookings`.
+- **Response envelope** (`nextapp/src/server/lib/apiResponse.js`):
   - Success: `{ "success": true, "data": <payload>, "message": "..." }`, optionally with a top-level `meta` object.
-  - Failure: `{ "success": false, "message": "...", "errors": [...] }`. Errors are raised as one of the `AppError` subclasses in `utils/errors.js` (`NotFoundError` 404, `ValidationError` 422, `AuthenticationError` 401, `AuthorizationError` 403, `ConflictError` 409, `PaymentError` 402, `DatabaseError` 500) and turned into this shape by the central `errorHandler` middleware. Stack traces are never included in production responses.
+  - Failure: `{ "success": false, "message": "...", "errors": [...] }`. Errors are raised as one of the `AppError` subclasses in `server/utils/errors.js` (`NotFoundError` 404, `ValidationError` 422, `AuthenticationError` 401, `AuthorizationError` 403, `ConflictError` 409, `PaymentError` 402, `DatabaseError` 500) and turned into this shape by the shared error-handling logic in `apiHandler.js`. Stack traces are never included in production responses.
   - Pagination: any list endpoint returns paginated results as `data: [...items], meta: { pagination: { page, limit, total, totalPages } }` (helper: `paginated()` in `apiResponse.js`).
-- **Query parameters** for list endpoints follow a common shape, parsed by `utils/pagination.js`: `?page=1&limit=20&search=...&status=...` (plus resource-specific filters, e.g. a date range or hotel id). `page`/`limit` are clamped (`limit` capped at 100, defaulting to 20) so a client can never request an unbounded result set.
-- **Content type**: JSON request/response bodies; `express.json({ limit: '2mb' })` and `express.urlencoded({ extended: true, limit: '2mb' })` cap request body size.
-- **Validation**: request `body`/`params`/`query` are validated with `zod` schemas via the `validate({ body, params, query })` middleware (`middleware/validate.js`) before a controller ever runs; a failing schema short-circuits with a 422 and a list of field errors.
+- **Query parameters** for list endpoints follow a common shape, parsed by `server/utils/pagination.js`: `?page=1&limit=20&search=...&status=...` (plus resource-specific filters, e.g. a date range or hotel id). `page`/`limit` are clamped (`limit` capped at 100, defaulting to 20) so a client can never request an unbounded result set.
+- **Content type**: JSON request/response bodies; request parsing in `parseRequest.js` caps body size at 2mb.
+- **Validation**: request `body`/`params`/`query` are validated with `zod` schemas (`nextapp/src/server/validators/`) before a route handler's business logic runs; a failing schema short-circuits with a 422 and a list of field errors.
 
 ## 2. Authentication flow
 
 - Auth is JWT-based with a short-lived **access token** and a longer-lived **refresh token**:
   - The access token is returned in the login/refresh response body and must be sent by the client as `Authorization: Bearer <token>` on every subsequent request. Default lifetime `JWT_EXPIRES_IN=15m`.
   - The refresh token is issued as an **httpOnly cookie** (not accessible to client-side JS) so a stolen access token alone cannot be replayed indefinitely; default lifetime `JWT_REFRESH_EXPIRES_IN=7d`. Its hash (not the raw token) is stored on the `users.refresh_token_hash` column so a compromised database dump cannot be used to forge sessions.
-  - `POST /api/v1/auth/refresh` exchanges a valid refresh cookie for a new access token.
-  - `middleware/auth.js`'s `authenticate` guard verifies the access token (via the `JwtService` wrapper around `jsonwebtoken`) on every protected route and populates `req.user` with the user id, roles, and resolved permission set used by `requirePermission(...)` (see `architecture.md` section 5 for the RBAC model, including the Super Admin bypass).
-- All `/auth/*` endpoints (see table below) are public except `/auth/logout`, `/auth/change-password`, and `/auth/me`, which require a valid access token. Login/register/password-reset endpoints are additionally rate-limited (`authLimiter`) to slow down credential-stuffing/brute-force attempts.
+  - `POST /api/v1/auth/refresh` exchanges a valid refresh cookie for a new access token. Page requests go through `nextapp/src/middleware.js`, which calls this same-server endpoint over HTTP to refresh an expired access cookie before a protected page renders (it runs on Next's Edge runtime, which can't import the Node-only Drizzle/pg stack that route handlers use, so it can't do the refresh in-process); `nextapp/src/lib/session.js`, used by server components and other route handlers, resolves a session by calling the auth logic directly in-process instead, since there is no longer an HTTP hop between "frontend" and "backend".
+  - Route handlers verify the access token (via the `JwtService` wrapper around `jsonwebtoken`) on every protected route and resolve the user id, roles, and permission set used by permission checks (see `architecture.md` section 5 for the RBAC model, including the Super Admin bypass). This logic lives in `nextapp/src/server/lib/apiHandler.js` / `authCookies.js` and is shared by every route handler, replacing the old Express `authenticate`/`requirePermission` middleware pair.
+- All `/auth/*` endpoints (see table below) are public except `/auth/logout`, `/auth/change-password`, and `/auth/me`, which require a valid access token. Login/register/password-reset endpoints are additionally rate-limited (`nextapp/src/server/lib/rateLimit.js`) to slow down credential-stuffing/brute-force attempts.
 
-## 3. Swagger / OpenAPI
+## 3. API documentation
 
-Interactive API documentation is generated at boot from `@openapi` JSDoc comments in the route files (`backend/src/config/swagger.js`, using `swagger-jsdoc`) and served at:
-
-```
-http://localhost:4000/api-docs
-```
-
-This is only mounted when `NODE_ENV !== 'production'` (see `app.js`) — it is a development/staging aid, not a production-exposed surface. As more route modules are implemented, add `@openapi` blocks following the existing examples in `auth.routes.js`, `bookings.routes.js`, `availability.routes.js`, and `health.routes.js` so the generated spec stays in sync with this document.
+There is no generated Swagger/OpenAPI UI in the current app — the interactive
+docs the old Express backend served at `/api-docs` were not carried over in
+the migration to Next.js Route Handlers. This document (and the route map
+below) is the source of truth for the route surface until/unless that is
+reinstated.
 
 ## 4. Route map
 
-This table is derived directly from `backend/src/routes/index.js` and the individual `*.routes.js` files, not guessed. The mount prefix column is relative to `/api/v1`.
+This table is derived directly from the folders under `nextapp/src/app/api/v1/`, not guessed. The mount prefix column is relative to `/api/v1`.
 
 | Mount prefix | Resource | Status |
 |---|---|---|
@@ -62,9 +60,9 @@ This table is derived directly from `backend/src/routes/index.js` and the indivi
 | `/settings` | Agency settings | Implemented |
 | `/uploads` | File uploads | Implemented |
 
-Every mounted resource has real handlers as of this writing — none of the route files still contain the `// TODO: implement <resource> endpoints` placeholder. Route modules were being implemented incrementally by other workstreams in parallel with this document, so re-check the route files under `backend/src/routes/` for the current state before relying on this table long after it was written.
+Every mounted resource has real handlers as of this writing — none of the route files still contain a placeholder. Re-check the folders under `nextapp/src/app/api/v1/` for the current state before relying on this table long after it was written.
 
-Note `/rooms/availability` is intentionally mounted **before** `/rooms` in `routes/index.js` so the more specific path is matched first. Similarly, within `tours.routes.js`, the literal `/bookings` and `/bookings/:id` routes are registered before the generic `/:id` tour-package routes so they are not shadowed by it.
+`/rooms/availability` and `/tours/bookings[/:id]` are separate static folders (`rooms/availability/route.js`, `tours/bookings/route.js`) sitting alongside the dynamic `rooms/[id]/route.js` and `tours/[id]/route.js` handlers. Next's filesystem router always prefers a matching static segment over a dynamic one, so these are never shadowed by the generic `:id` routes — unlike the old Express router, this requires no manual mount-order care.
 
 ### Endpoints, in full
 
@@ -267,4 +265,4 @@ Note `/rooms/availability` is intentionally mounted **before** `/rooms` in `rout
 **Uploads** (`/uploads`, requires auth)
 | Method | Path | Permission | Notes |
 |---|---|---|---|
-| POST | `/uploads/:category` | `uploads.create` | Multipart file upload (`multer`-backed, via the `FileUploadHandler` wrapper in `lib/`). `category` is e.g. `hotels`, `rooms`, `documents`, `passports`, `invoices`. Returns a stored file URL, behind the `FILE_STORAGE_DRIVER=local|s3` abstraction described in `architecture.md`. Used by the hotel/room-type image and customer-document endpoints above. |
+| POST | `/uploads/:category` | `uploads.create` | Multipart file upload, read via the route handler's `request.formData()` and validated by the `FileUploadHandler` wrapper in `server/lib/` (mime-type/size checks, no `multer` dependency). `category` is e.g. `hotels`, `rooms`, `documents`, `passports`, `invoices`. Returns a stored file URL, behind the `FILE_STORAGE_DRIVER=local|s3` abstraction described in `architecture.md`, served back at `/uploads/:path*` by `app/uploads/[...path]/route.js`. Used by the hotel/room-type image and customer-document endpoints above. |

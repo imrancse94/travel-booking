@@ -1,0 +1,114 @@
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* The logo is always a circle -- cropped to fill it, not letterboxed -- so a
+   wide wordmark and a square icon read as the same shape everywhere the app
+   shows it. The initials fallback below matches size and shape exactly, so
+   swapping between "no logo yet" and "logo uploaded" never shifts layout. */
+.brand-mark__logo {
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--color-surface);
+  border: 3px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+/* Shown until a logo is uploaded: the agency's initials on the brand colour. */
+.brand-mark__initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 5px solid var(--color-border);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.brand-mark__name {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Default icon + wordmark ------------------------------------------- */
+.brand-mark--wordmark {
+  gap: var(--space-3);
+  line-height: 1;
+}
+
+.brand-mark__icon {
+  height: 44px;
+  width: 44px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.brand-mark__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.brand-mark__word {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 7px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.55rem;
+  letter-spacing: -0.03em;
+  color: var(--color-navy);
+}
+
+.brand-mark--light .brand-mark__word {
+  color: #fff;
+}
+
+.brand-mark__word-accent {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Orange swoosh under "vixo" only, as in the logo. */
+.brand-mark__swoosh {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 52%;
+  height: 7px;
+  color: var(--color-accent);
+  overflow: visible;
+}
+
+.brand-mark__tagline {
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.26em;
+  white-space: nowrap;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.brand-mark--light .brand-mark__tagline {
+  color: rgba(255, 255, 255, 0.72);
+}

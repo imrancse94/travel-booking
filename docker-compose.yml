@@ -12,7 +12,7 @@ services:
     ports:
       - '5432:5432'
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./resources/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-booking_user} -d ${POSTGRES_DB:-booking_db}']
       interval: 5s
@@ -28,7 +28,7 @@ services:
     ports:
       - '6379:6379'
     volumes:
-      - redis_data:/data
+      - ./resources/redis:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -52,7 +52,7 @@ services:
     ports:
       - '5050:80' # web UI: http://localhost:5050
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
+      - ./resources/pgadmin:/var/lib/pgadmin
       # Pre-registers the `postgres` service as a connection so there is
       # nothing to fill in by hand (password is POSTGRES_PASSWORD).
       - ./pgadmin.servers.json:/pgadmin4/servers.json:ro
@@ -84,14 +84,14 @@ services:
     networks:
       - booking_network
 
-  backend:
+  app:
     build:
-      context: ./backend
+      context: ./nextapp
       target: development
-    container_name: booking_backend
+    container_name: booking_app
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - ./nextapp/.env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-booking_user}:${POSTGRES_PASSWORD:-booking_password}@postgres:5432/${POSTGRES_DB:-booking_db}?schema=public
       REDIS_URL: redis://redis:6379
@@ -99,19 +99,24 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
     ports:
-      - '4000:4000'
+      - '5173:5173'
     volumes:
-      - ./backend/src:/app/src
-      - ./backend/seeds:/app/seeds
-      - ./backend/tests:/app/tests
-      - ./backend/logs:/app/logs
-      # A bind mount, not a named volume: uploaded files (agency logo/favicon,
-      # hotel images, invoices) should be inspectable from the host and, more
-      # importantly, survive `docker compose restart`/`up --force-recreate` --
-      # without this they lived only in the container's writable layer and
-      # vanished on the next recreate.
-      - ./backend/uploads:/app/uploads
-      - backend_node_modules:/app/node_modules
+      - ./nextapp/src:/app/src
+      - ./nextapp/public:/app/public
+      # Mounted so config changes apply on a restart instead of silently
+      # requiring an image rebuild.
+      - ./nextapp/next.config.js:/app/next.config.js
+      - ./nextapp/instrumentation.js:/app/instrumentation.js
+      # Local-driver uploads land here (see server/services/uploadService.js's
+      # UPLOAD_ROOT = process.cwd()/uploads, served by app/uploads/[...path]/route.js)
+      # -- bind-mounted, like every other stateful bind mount, under
+      # ./resources/, so files survive a container recreate instead of living
+      # only in the container's writable layer.
+      - ./resources/uploads:/app/uploads
+      - app_node_modules:/app/node_modules
+      # Keeps Next's build cache off the host and out of the bind mounts, so a
+      # rebuilt container starts warm instead of recompiling every route.
+      - app_next_cache:/app/.next
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,7 +125,7 @@ services:
       mailpit:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'node', '-e', "fetch('http://localhost:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:5173/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -129,49 +134,14 @@ services:
     networks:
       - booking_network
 
-  frontend:
-    build:
-      context: ./frontend
-      target: development
-    container_name: booking_frontend
-    restart: unless-stopped
-    env_file:
-      - ./frontend/.env
-    environment:
-      # next.config.js proxies /api/* here, so the browser only ever talks to
-      # the Next dev server and there is no CORS preflight in development
-      # either. `next dev` evaluates the config at startup, so unlike the
-      # production image this really is a runtime value.
-      BACKEND_ORIGIN: http://backend:4000
-      # Server components and middleware call the API directly by service name.
-      # The browser cannot resolve that, which is why this is separate from the
-      # relative /api/v1 the client uses.
-      API_INTERNAL_URL: http://backend:4000/api/v1
-    ports:
-      - '5173:5173'
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-      # Mounted so config changes (rewrites, in particular) apply on a restart
-      # instead of silently requiring an image rebuild.
-      - ./frontend/next.config.js:/app/next.config.js
-      - frontend_node_modules:/app/node_modules
-      # Keeps Next's build cache off the host and out of the bind mounts, so a
-      # rebuilt container starts warm instead of recompiling every route.
-      - frontend_next_cache:/app/.next
-    depends_on:
-      - backend
-    networks:
-      - booking_network
-
 networks:
   booking_network:
     driver: bridge
 
 volumes:
-  postgres_data:
-  pgadmin_data:
-  redis_data:
-  backend_node_modules:
-  frontend_node_modules:
-  frontend_next_cache:
+  # node_modules/.next stay named volumes, not bind mounts: this Mac and the
+  # Linux app container need different native binaries in node_modules (see
+  # the sharp ERR_DLOPEN_FAILED fixed earlier) -- bind-mounting it would
+  # reintroduce that mismatch every time the container starts.
+  app_node_modules:
+  app_next_cache:

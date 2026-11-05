@@ -2,95 +2,87 @@
 
 ## 1. Overview
 
-The system is a Travel Agency + Hotel Booking Management System composed of two independently deployable applications sharing one PostgreSQL database:
-
-- **backend** — a REST API (Node.js + Express) that owns all business logic, data access, authentication, and background jobs.
-- **frontend** — a React single-page application (admin console + customer-facing booking site) that talks to the backend exclusively over HTTP.
-
-Both applications live in one repository so they can be versioned, tested, and deployed together, but they do not share code or a runtime process.
+The system is a Travel Agency + Hotel Booking Management System built as a **single Next.js application** (`nextapp/`) that is both the frontend and the API server. There is no separate backend process: a former standalone Express API was merged into this app as Next.js Route Handlers, running in the same Node.js process as the UI.
 
 ```
 Browser (admin / customer)
         |
         v
-   nginx (reverse proxy: /api/* -> backend, everything else -> frontend)
-   frontend (Next.js App Router)
-        |  HTTPS, /api/v1/*
+   nginx (reverse proxy: everything -> the app container, port 5173)
+        |
         v
-   backend (Express API)
+   Next.js app (App Router: pages + /api/v1/* route handlers, one process)
         |
         +--> PostgreSQL (system of record)
         +--> Redis (cache / rate limiting support)
         +--> SMTP / console (email)
-        +--> S3 / local disk (file storage)
+        +--> S3 / local disk (file storage, served at /uploads/:path*)
         +--> payment gateway adapter (mock | stripe | paypal | bkash | nagad)
 ```
 
 ## 2. Technology stack
 
-**Backend**
-- Node.js 20 LTS, plain JavaScript (ES Modules, no TypeScript, no build step — `node --watch` in dev, `node src/server.js` in production)
-- Express 4 for HTTP routing and middleware
-- Drizzle ORM (`drizzle-orm` + the `drizzle-kit` CLI) against PostgreSQL — the single chosen data-access layer for the whole project (per the "choose one ORM" instruction)
+- Node.js 20 LTS, plain JavaScript (ES Modules, no TypeScript)
+- Next.js 16 (App Router) for routing (both pages and the API), dev server and production build (`output: 'standalone'`)
+- React 19 for the UI. File-based routing under `src/app`. The root layout is a **server component**: it reads the access token from an httpOnly cookie and resolves the session in-process via `src/lib/session.js` (no HTTP hop — session resolution calls the auth logic directly, since it now runs in the same process as the route handlers), passing it into a small client `SessionProvider`. So the first paint already knows who is signed in — no bootstrap request and no signed-out flash
+- `middleware.js` gates protected routes before any page JS is sent, and owns token refresh: the access cookie expires with its 15-minute JWT, and only middleware (not a server component) can write the replacement cookie. Middleware runs on Next's **Edge runtime**, which cannot import the Node-only Drizzle/pg stack, so it still makes one HTTP call — to this same server's own `/api/v1/auth/refresh` — instead of importing session logic directly. The refreshed token is applied to the *request* as well as the response, so the render that triggered the refresh already sees the session
+- **No client-side store.** Session state is resolved per request on the server. Interactive leaves (forms, wizards, pickers) stay client components, which is what they should be
+- Drizzle ORM (`drizzle-orm` + the `drizzle-kit` CLI) against PostgreSQL — the single chosen data-access layer for the whole project, accessed through the `DrizzleClient` wrapper class (`src/server/lib/DrizzleClient.js`); `src/server/db/index.js` is a thin re-export of it
 - Redis via `ioredis`, wrapped by `RedisClient`
-- `zod` for request validation, `jsonwebtoken` for JWT, `bcrypt` for password hashing, `pino`/`pino-http` for structured logging, `swagger-jsdoc` + `swagger-ui-express` for API docs, `pdfkit` for invoice PDFs, `multer` for uploads, `aws-sdk` for S3, `nodemailer` for SMTP
-- Jest + Supertest for backend tests
-
-**Frontend**
-- React 18, plain JavaScript (no TypeScript)
-- Next.js 16 (App Router) for routing, dev server and production build
-- File-based routing under `src/app`. The root layout is a **server component**: it reads the access token from an httpOnly cookie, resolves the session against `GET /auth/me`, and passes it into a small client `SessionProvider`. So the first paint already knows who is signed in — no bootstrap request and no signed-out flash
-- `middleware.js` gates protected routes before any page JS is sent, and owns token refresh: the access cookie expires with its 15-minute JWT, and only middleware (not a server component) can write the replacement cookie. The refreshed token is applied to the *request* as well as the response, so the render that triggered the refresh already sees the session
-- **No client-side store.** Session state was a Redux slice holding `{ user, isLoading }`; the server now resolves it per request. Interactive leaves (forms, wizards, pickers) stay client components, which is what they should be
-- Axios (wrapped by `ApiClient`) for HTTP calls
-- Vitest + Testing Library for tests
+- Axios (wrapped by `ApiClient`) for browser-side HTTP calls to the app's own `/api/v1/*` routes
+- `zod` for request validation, `jsonwebtoken` for JWT (wrapped by `JwtService`), `bcrypt` for password hashing (wrapped by `BcryptHasher`), `pino` for structured logging (wrapped by `Logger`), `pdfkit` for invoice PDFs (wrapped by `PdfBuilder`), `aws-sdk` for S3 (wrapped by `S3Client`), `nodemailer` for SMTP (wrapped by `MailTransport`)
+- Vitest + Testing Library for all tests — component tests and route-handler integration tests alike
 
 **Database**
-- PostgreSQL 16, accessed only through Drizzle. Migrations are generated with `drizzle-kit generate` and applied by `src/db/migrate.js` (`npm run db:migrate`).
+- PostgreSQL 16, accessed only through Drizzle (via `DrizzleClient`). Migrations are generated with `drizzle-kit generate` and applied by `src/server/db/migrate.js` (`npm run db:migrate`).
 
 **Infrastructure**
-- Docker multi-stage builds for both apps, Docker Compose for local development
+- Docker multi-stage build for the one app image, Docker Compose for local development
 - GitHub Actions for CI and CD
-- A single AWS EC2 instance running Docker Compose for production, with images on GHCR — see `deployment.md`
+- A single AWS EC2 instance running Docker Compose for production, with the image on GHCR — see `deployment.md`
 
-## 3. Backend layered architecture
+## 3. Layered architecture
 
-Every request flows through a fixed sequence of layers. Business logic is never placed directly in a controller or a route file:
+Every API request flows through a fixed sequence of layers. Business logic is never placed directly in a route handler:
 
 ```
-Route            defines the URL/method and wires middleware (routes/*.routes.js)
-  -> Middleware  cross-cutting concerns: auth, RBAC, validation, rate limiting
-  -> Controller  translates HTTP <-> service calls, no business logic (controllers/*.js)
-  -> Service     business rules, transactions, orchestration (services/*.js)
-  -> Repository  data access for the handful of domains that warrant one on top of Drizzle (repositories/*.js)
-  -> Database    PostgreSQL via the Drizzle client (src/db/index.js)
+Route Handler   defines the URL/method (src/app/api/v1/<resource>/route.js), parses the request,
+                enforces auth/RBAC/validation, calls the service layer, shapes the HTTP response
+  -> Service    business rules, transactions, orchestration (src/server/services/*.js)
+  -> Repository data access for the handful of domains that warrant one on top of Drizzle
+                (src/server/repositories/*.js)
+  -> Database   PostgreSQL via the DrizzleClient wrapper (src/server/db/index.js)
 ```
 
 Notes on how this is applied in practice:
 
-- **Route** files (`src/routes/*.routes.js`) only declare `router.get/post/put/delete(...)` and attach the middleware chain (`authenticate`, `requirePermission(...)`, `validate({...})`). They are mounted under a common prefix in `src/routes/index.js`.
-- **Middleware** (`src/middleware/`) handles authentication (`auth.js`), authorization (`rbac.js`), input validation (`validate.js`, backed by `zod` schemas in `src/validators/`), rate limiting (`rateLimiter.js`), request logging (`requestLogger.js`), and centralized error translation (`errorHandler.js`).
-- **Controller** functions (`src/controllers/*.js`) parse `req`, call one or more service functions, and shape the HTTP response using the shared envelope helpers in `src/utils/apiResponse.js`.
-- **Service** functions (`src/services/*.js`) contain the actual business rules — availability checks, pricing, booking state transitions, settings resolution, auditing — and are the only layer allowed to open a database transaction. Services are plain functions, not classes, and are unit-testable independent of Express.
-- **Repository** functions (`src/repositories/*.js`) isolate Drizzle queries behind a narrow function set, one module per domain; a service that needs a transaction spanning several tables opens it directly with `db.transaction`.
-- **Database** access always goes through the shared Drizzle client (`src/db/index.js`); no module outside the services/repositories layer touches it directly.
+- **Route Handlers** (`src/app/api/v1/<resource>/route.js` — 94 files across 26 domains: auth, hotels, rooms, room-types, rate-plans, amenities, availability, bookings, users, roles, customers, commissions, activity-logs, notifications, settings, tours, transport, services, destinations, dashboard, health, invoices, refunds, reports, payments, uploads) export the HTTP method functions Next expects (`GET`, `POST`, `PUT`, `DELETE`, ...). Each one authenticates the caller, checks the required permission, validates the request body/query with a `zod` schema, and then calls **only** the service layer — this was a hard rule throughout the port from Express: no route handler touches a repository or Drizzle directly. Shared plumbing (auth/RBAC checks, `zod` validation, error-to-response mapping, the response envelope) lives in `src/server/lib/apiHandler.js`, `apiResponse.js`, `parseRequest.js`, and `authCookies.js`.
+- **Service** functions (`src/server/services/*.js`) contain the actual business rules — availability checks, pricing, booking state transitions, settings resolution, auditing — and are the only layer allowed to open a database transaction. Services are plain functions, not classes, and are unit-testable independent of Next.
+- **Repository** functions (`src/server/repositories/*.js`) isolate Drizzle queries behind a narrow function set, one module per domain; a service that needs a transaction spanning several tables opens it directly with `db.transaction`.
+- **Database** access always goes through the shared `DrizzleClient` wrapper (`src/server/db/index.js`); no module outside the services/repositories layer touches it directly.
+- **Uploaded files** are served by `src/app/uploads/[...path]/route.js` — the same `/uploads/:path*` URL shape the old Express static file server used.
+- **The hold-expiry background sweeper** starts from `nextapp/instrumentation.js`, Next's supported hook for one-time startup code in a long-running server (this app deploys as a persistent Docker container, not serverless, so `register()` runs exactly once per process). It replaces the `startBookingHoldSweeper()` call that used to live in Express's `server.js`. `register()` is guarded to the Node runtime (`process.env.NEXT_RUNTIME !== 'nodejs'` short-circuits it), because it also fires for the Edge runtime (`middleware.js`), which cannot import the job's Drizzle/pg dependencies and would otherwise start a duplicate sweeper.
 
-Cross-cutting infrastructure required by section 4 of the original spec is all present: Helmet, CORS (env-configured allow-list), `express-rate-limit`, centralized error handling (`AppError` subclasses + `errorHandler.js`), graceful shutdown on `SIGTERM`/`SIGINT` in `server.js`, and structured logging via the `Logger` wrapper around `pino`.
+Cross-cutting infrastructure required by section 4 of the original spec is all present: security headers, CORS (env-configured allow-list), rate limiting (`src/server/lib/rateLimit.js`), centralized error handling (`AppError` subclasses mapped to the response envelope), and structured logging via the `Logger` wrapper around `pino`.
 
 ## 4. The `lib/` wrapper-class convention
 
-Every external npm package that talks to the outside world or provides a cross-cutting capability is wrapped in a small class under `backend/src/lib/<Name>.js` (and the equivalent `frontend/src/lib/ApiClient.js` on the frontend):
+Every external npm package that talks to the outside world or provides a cross-cutting capability is wrapped in a small class under `nextapp/src/server/lib/<Name>.js` (and the equivalent `nextapp/src/lib/ApiClient.js` on the browser side):
 
 | Wrapper | Wraps | Location |
 |---|---|---|
-| `BcryptHasher` | `bcrypt` | `backend/src/lib/BcryptHasher.js` |
-| `JwtService` | `jsonwebtoken` | `backend/src/lib/JwtService.js` |
-| `RedisClient` | `ioredis` | `backend/src/lib/RedisClient.js` |
-| `MailTransport` | `nodemailer` | `backend/src/lib/MailTransport.js` |
-| `Logger` | `pino` | `backend/src/lib/Logger.js` |
-| `ApiClient` | `axios` | `frontend/src/lib/ApiClient.js` |
+| `DrizzleClient` | `drizzle-orm` + `pg` | `nextapp/src/server/lib/DrizzleClient.js` |
+| `BcryptHasher` | `bcrypt` | `nextapp/src/server/lib/BcryptHasher.js` |
+| `JwtService` | `jsonwebtoken` | `nextapp/src/server/lib/JwtService.js` |
+| `RedisClient` | `ioredis` | `nextapp/src/server/lib/RedisClient.js` |
+| `MailTransport` | `nodemailer` | `nextapp/src/server/lib/MailTransport.js` |
+| `Logger` | `pino` | `nextapp/src/server/lib/Logger.js` |
+| `PdfBuilder` | `pdfkit` | `nextapp/src/server/lib/PdfBuilder.js` |
+| `S3Client` | `aws-sdk` | `nextapp/src/server/lib/S3Client.js` |
+| `FileUploadHandler` | multipart upload parsing | `nextapp/src/server/lib/FileUploadHandler.js` |
+| `ApiClient` | `axios` | `nextapp/src/lib/ApiClient.js` |
 
-The rest of the application imports and depends only on these wrapper classes — never on `bcrypt`, `jsonwebtoken`, `ioredis`, `nodemailer`, `pino`, or `axios` directly (the only sanctioned exception is the wrapper file itself, plus rare direct interop needs such as handing `pino-http` the raw `pino` instance via `Logger.raw`). Additional libraries brought in by other route/feature modules as they are implemented (e.g. `pdfkit` for invoice generation, `multer` for uploads, `aws-sdk` for S3) are expected to follow the same pattern and get their own `lib/PdfGenerator.js`, `lib/UploadHandler.js`, `lib/S3Client.js`, etc.
+The rest of the application imports and depends only on these wrapper classes — never on `bcrypt`, `jsonwebtoken`, `ioredis`, `nodemailer`, `pino`, `drizzle-orm`/`pg`, or `axios` directly (the only sanctioned exception is the wrapper file itself). Additional libraries brought in as new features are implemented are expected to follow the same pattern and get their own wrapper class.
 
 Why this convention exists:
 
@@ -106,16 +98,16 @@ Authorization is modeled as a classic many-to-many graph, stored in PostgreSQL a
 User --(user_roles)--> Role --(role_permissions)--> Permission
 ```
 
-- `roles` — the 7 fixed roles: Super Admin, Agency Admin, Hotel Admin, Booking Agent, Accountant, Tour Manager, Customer (see `backend/src/config/permissions.js`, `ROLES`).
+- `roles` — the 7 fixed roles: Super Admin, Agency Admin, Hotel Admin, Booking Agent, Accountant, Tour Manager, Customer (see `nextapp/src/server/config/permissions.js`, `ROLES`).
 - `permissions` — a flat, granular list such as `bookings.create`, `hotels.update`, `payments.refund` (see `PERMISSIONS` in the same file).
 - `user_roles` — join table, a user can hold more than one role.
 - `role_permissions` — join table, a role can hold many permissions.
 
-At login, the backend resolves a user's roles and the union of their permissions and attaches both to `req.user`. Route guards use `requirePermission('bookings.create')` (or an array, matched with OR semantics) from `middleware/rbac.js`. **Super Admin is a special case: it bypasses every permission check** (`requirePermission` returns `next()` immediately if `req.user.roles.includes('Super Admin')`), rather than being granted every permission row explicitly — this keeps Super Admin correct even as new permissions are added later without a seed/migration to update its grant set. Every other role's default permission set is seeded from `ROLE_PERMISSIONS` in `permissions.js` (see `database.md` and `backend/seeds/index.js`).
+At login, the session resolution logic works out a user's roles and the union of their permissions and attaches both to the resolved session. Route handlers guard access with a `requirePermission('bookings.create')`-style check (or an array, matched with OR semantics). **Super Admin is a special case: it bypasses every permission check**, rather than being granted every permission row explicitly — this keeps Super Admin correct even as new permissions are added later without a seed/migration to update its grant set. Every other role's default permission set is seeded from `ROLE_PERMISSIONS` in `permissions.js` (see `database.md` and `nextapp/src/server/seeds/index.js`).
 
 ## 6. Notification / email / payment provider abstractions
 
-Following the "never hard-code an external provider" rule, three integration points are built as small pluggable adapters under `backend/src/integrations/`, each selected by an environment variable so the system stays fully runnable in local development with zero external accounts:
+Following the "never hard-code an external provider" rule, three integration points are built as small pluggable adapters under `nextapp/src/server/integrations/`, each selected by an environment variable so the system stays fully runnable in local development with zero external accounts:
 
 - **Email** (`integrations/email/providers/`) — `consoleProvider.js` (default in development: logs the email instead of sending it) and `smtpProvider.js` (real SMTP via the `MailTransport` wrapper), selected by `EMAIL_PROVIDER=console|smtp`. Templates live in `integrations/email/emailTemplates.js` and are rendered by `services/emailService.js`.
 - **SMS / WhatsApp** (`integrations/sms/smsProvider.js`, `integrations/whatsapp/whatsappProvider.js`) — same provider-selection shape as email: `SMS_PROVIDER`/`WHATSAPP_PROVIDER` pick between `none` (channel disabled, returns `{ skipped: true }` — the default) and `console` (development provider that logs the message instead of sending it, so the channel is exercisable locally). Wiring in Twilio, Vonage, the Meta Cloud API, or a local Bangladesh gateway is a one-file change that adds a `case` and a provider factory; no caller changes.
@@ -136,53 +128,40 @@ All four abstractions share the same shape: a small resolver function keyed off 
 
 ## 7. Folder structure
 
-The repository intentionally uses **lowercase** `backend/` and `frontend/` as its two top-level application folders — this differs from the capitalized `Backend/`/`Frontend/` shown in the original project brief, and was an explicit, deliberate project decision (lowercase is the Node/JS ecosystem convention and matches every import path, Docker build context, and CI working-directory in this repo). Everything else follows the brief's structure:
+The repository uses a single top-level application folder, **lowercase** `nextapp/` — this matches the Node/JS ecosystem convention and every import path, Docker build context, and CI working directory in this repo.
 
 ```
 /
-├── backend/
+├── nextapp/
 │   ├── src/
-│   │   ├── config/        # env, redis client, logger, swagger, permissions
-│   │   ├── db/            # Drizzle client, schema.js, relations.js, migrations/
-│   │   ├── controllers/   # HTTP <-> service glue, no business logic
-│   │   ├── middleware/    # auth, rbac, validate, rateLimiter, requestLogger, errorHandler
-│   │   ├── models/        # reserved for non-ORM model helpers
-│   │   ├── repositories/  # narrow data-access modules on top of Drizzle
-│   │   ├── routes/        # one *.routes.js per resource, mounted in routes/index.js
-│   │   ├── services/      # business logic and transactions
-│   │   ├── validators/    # zod schemas
-│   │   ├── utils/         # errors, money, pagination, apiResponse, bookingNumber, asyncHandler
-│   │   ├── jobs/           # background jobs (hold-expiry sweeper)
-│   │   ├── integrations/  # pluggable external providers (email/sms/whatsapp/payment)
-│   │   ├── notifications/ # notification fan-out service
-│   │   ├── lib/            # wrapper classes around every external npm library
-│   │   ├── app.js
-│   │   └── server.js
-│   ├── migrations/         # reserved (migrations live under src/db/migrations)
-│   ├── seeds/              # database seed script
-│   ├── tests/              # unit/ and integration/
-│   ├── Dockerfile
-│   ├── package.json
-│   └── .env.example
-│
-├── frontend/
-│   ├── src/
-│   │   ├── components/    # reusable UI primitives (buttons, tables, modals, ...)
-│   │   ├── layouts/       # admin shell, customer shell
-│   │   ├── pages/         # route-level page components
-│   │   ├── features/      # feature-based modules (bookings, hotels, ...)
-│   │   ├── app/           # App Router tree: layouts, page.jsx, auth/permission gates
-│   │   ├── views/         # the page components those routes render
-│   │   ├── services/      # API call modules built on lib/ApiClient
+│   │   ├── app/
+│   │   │   ├── api/v1/        # Route Handlers, one route.js per endpoint, 26 resource folders
+│   │   │   ├── uploads/       # [...path]/route.js — serves uploaded files
+│   │   │   └── ...            # page routes: layouts, page.jsx, auth/permission gates
+│   │   ├── components/        # reusable UI primitives (buttons, tables, modals, ...)
+│   │   ├── layouts/           # admin shell, customer shell
+│   │   ├── views/             # the page components those routes render
 │   │   ├── hooks/
-│   │   ├── contexts/      # auth context, etc.
+│   │   ├── contexts/          # auth context, etc.
 │   │   ├── utils/
 │   │   ├── constants/
-│   │   ├── assets/
 │   │   ├── styles/
-│   │   ├── lib/            # ApiClient wrapper around axios
-│   │   ├── App.jsx
-│   │   └── main.jsx
+│   │   ├── lib/                # ApiClient wrapper around axios, session.js (server-side session resolution)
+│   │   ├── middleware.js       # route gating + token refresh at the Edge
+│   │   ├── server/             # Node-only API/data layer, imported only by route handlers
+│   │   │   ├── config/         # env, permissions
+│   │   │   ├── db/             # thin re-export of DrizzleClient, schema.js, relations.js, migrations/
+│   │   │   ├── services/       # business logic and transactions
+│   │   │   ├── repositories/   # narrow data-access modules on top of Drizzle
+│   │   │   ├── validators/     # zod schemas
+│   │   │   ├── utils/          # errors, money, pagination, apiResponse, bookingNumber
+│   │   │   ├── jobs/           # background jobs (hold-expiry sweeper)
+│   │   │   ├── integrations/   # pluggable external providers (email/sms/whatsapp/payment)
+│   │   │   ├── notifications/  # notification fan-out service
+│   │   │   ├── lib/            # wrapper classes around every external npm library
+│   │   │   └── seeds/          # database seed script
+│   │   └── tests/              # Vitest suites: component tests + api/ route-handler integration tests, helpers/
+│   ├── instrumentation.js      # Next startup hook — starts the hold-expiry sweeper
 │   ├── public/
 │   ├── Dockerfile
 │   ├── package.json
@@ -190,7 +169,10 @@ The repository intentionally uses **lowercase** `backend/` and `frontend/` as it
 │
 ├── .github/
 │   ├── workflows/
-│   │   └── main.yml
+│   │   ├── ci.yml
+│   │   ├── _deploy.yml
+│   │   ├── staging.yml
+│   │   └── production.yml
 │   └── scripts/
 │       └── smoke.sh
 │
@@ -207,4 +189,5 @@ The repository intentionally uses **lowercase** `backend/` and `frontend/` as it
 └── README.md
 ```
 
-No extra top-level folders (`database/`, `server/`, `client/`, `api/`, `infra/`, `devops/`) exist — infrastructure configuration stays at the repo root or under `.github/`, exactly as required.
+No extra top-level folders (`database/`, `server/`, `client/`, `api/`, `infra/`, `devops/`) exist at the repo root — infrastructure configuration stays at the repo root or under `.github/`, exactly as required.
+</content>

@@ -1,0 +1,240 @@
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.admin-layout__sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--color-navy);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.admin-layout__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-layout__brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.admin-layout__brand-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.admin-layout__nav {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3);
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.admin-layout__nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.admin-layout__nav-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.admin-layout__nav-link--active {
+  background: var(--gradient-brand);
+  color: #fff;
+  font-weight: 600;
+}
+
+.admin-layout__nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  font-size: 1.15rem;
+}
+
+.admin-layout__scrim {
+  display: none;
+}
+
+.admin-layout__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-layout__topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(180%) blur(10px);
+  box-shadow: 0 1px 0 #d9e7fb, 0 6px 18px -10px rgba(15, 23, 60, 0.18);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.admin-layout__hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: #e4efff;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.admin-layout__hamburger span {
+  display: block;
+  height: 2px;
+  background: var(--color-text);
+  margin: 0 6px;
+}
+
+.admin-layout__topbar-agency {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.admin-layout__topbar-user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.admin-layout__user-name {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #e8f1ff;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-navy);
+}
+
+.admin-layout__logout {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 0;
+  background: #e4efff;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.admin-layout__logout:hover {
+  background: #d2e3ff;
+}
+
+.admin-layout__breadcrumb-bar {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-6) 0;
+}
+
+.admin-layout__content {
+  flex: 1;
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-6) var(--space-7);
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .admin-layout__sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-md);
+  }
+
+  .admin-layout__sidebar--open {
+    transform: translateX(0);
+  }
+
+  .admin-layout__scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.4);
+    z-index: 90;
+  }
+
+  .admin-layout__hamburger {
+    display: flex;
+  }
+
+  .admin-layout__topbar-agency {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-layout__content {
+    padding: var(--space-4);
+  }
+  .admin-layout__user-name {
+    display: none;
+  }
+}
+
+/* Footer: .admin-layout__main is a flex column and the content area grows, so on
+   a short page the footer rests at the bottom of the viewport instead of
+   floating under the content; on a long page it simply follows the content. */
+.admin-layout__footer {
+  /* Pinned to the bottom of the viewport while scrolling; rests at the bottom of
+     a short page. */
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  box-shadow: 0 -6px 18px -12px rgba(15, 23, 60, 0.25);
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid #d9e7fb;
+  background: var(--color-surface);
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}

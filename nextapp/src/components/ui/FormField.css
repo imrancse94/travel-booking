@@ -1,0 +1,69 @@
+/* Shared styling for Input / Select / Textarea, which all render a
+   .form-field wrapper around a labeled control. */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.form-field__label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: var(--color-navy);
+}
+
+.form-field__required {
+  color: var(--color-danger);
+  margin-left: 2px;
+}
+
+.form-field__control {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid #c9dcf7;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.92rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-field__control:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.form-field__control--error {
+  border-color: var(--color-danger);
+}
+
+.form-field__control--select {
+  cursor: pointer;
+}
+
+.form-field__control:disabled {
+  background: #e8f1ff;
+  border-color: #d5e5fb;
+  color: #6a80a9;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+textarea.form-field__control {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.form-field__message {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.form-field__message--error {
+  color: var(--color-danger);
+}
+

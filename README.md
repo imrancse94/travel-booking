@@ -4,11 +4,9 @@ A production-oriented hotel booking and travel agency management platform: hotel
 
 ## Tech stack
 
-**Backend** — Node.js 20 LTS, Express, plain JavaScript (ES Modules, no TypeScript), Drizzle ORM against PostgreSQL, Redis, JWT auth, Zod validation, Swagger/OpenAPI docs.
+**Application** — Next.js 16 (App Router), React 19, plain JavaScript (ES Modules, no TypeScript). A single Node.js 20 LTS process serves both the UI and the API: former REST endpoints now live as Next.js Route Handlers under `nextapp/src/app/api/v1/**`, which call a server-side service layer backed by Drizzle ORM against PostgreSQL, Redis, JWT auth (httpOnly cookies), and Zod validation. Session state is resolved on the server and passed into a React context — there is no client-side store.
 
-**Frontend** — Next.js 16 (App Router), React 19, plain JavaScript (no TypeScript), Axios. Session state is resolved on the server from an httpOnly cookie and passed into a React context — there is no client-side store.
-
-**Infrastructure** — Docker (multi-stage builds), Docker Compose for local development and production, GitHub Actions for CI/CD, images on GHCR, deployed to a single AWS EC2 instance behind nginx, which reverse-proxies `/api/*` to the backend and everything else to the Next.js server. Port 80 is the only published port.
+**Infrastructure** — Docker (multi-stage build), a single Docker Compose service for the app plus Postgres/Redis/pgAdmin/Mailpit, GitHub Actions for CI/CD, images on GHCR, deployed to a single AWS EC2 instance behind nginx, which reverse-proxies everything to the one Next.js `app` container. Port 80 is the only published port.
 
 See [`documentation/architecture.md`](documentation/architecture.md) for the full system design.
 
@@ -16,62 +14,50 @@ See [`documentation/architecture.md`](documentation/architecture.md) for the ful
 
 ```
 /
-├── backend/                # Express API — see documentation/architecture.md
+├── nextapp/                  # the whole application (UI + API) — see documentation/architecture.md
 │   ├── src/
-│   │   ├── config/         # env, redis client, logger, swagger, permissions
-│   │   ├── db/             # Drizzle client, schema.js, relations.js, migrations/
-│   │   ├── controllers/    # HTTP <-> service glue
-│   │   ├── middleware/     # auth, rbac, validate, rateLimiter, requestLogger, errorHandler
-│   │   ├── repositories/   # data-access modules on top of Drizzle
-│   │   ├── routes/         # one *.routes.js per resource
-│   │   ├── services/       # business logic and transactions
-│   │   ├── validators/     # zod schemas
-│   │   ├── utils/          # errors, money, pagination, apiResponse, bookingNumber
-│   │   ├── jobs/           # background jobs (hold-expiry sweeper)
-│   │   ├── integrations/   # pluggable email/sms/whatsapp/payment providers
-│   │   ├── notifications/  # notification fan-out service
-│   │   ├── lib/            # wrapper classes around every external npm library
-│   │   ├── app.js
-│   │   └── server.js
-│   ├── seeds/               # database seed script
-│   ├── tests/                # unit/ and integration/
+│   │   ├── app/
+│   │   │   ├── api/v1/       # Route Handlers (route.js) — the former Express REST API, one folder per resource
+│   │   │   ├── uploads/      # [...path]/route.js — serves uploaded files at /uploads/:path*
+│   │   │   └── ...           # page routes: layouts + page.jsx for the admin console and customer site
+│   │   ├── components/       # reusable UI primitives
+│   │   ├── layouts/          # admin shell, customer shell
+│   │   ├── views/            # page components the routes render
+│   │   ├── contexts/         # AuthProvider + useAuth()
+│   │   ├── hooks/            # useResourceList, usePermission, usePagination, useDebounce
+│   │   ├── constants/        # nav config, select options
+│   │   ├── utils/            # formatting helpers
+│   │   ├── styles/           # global CSS + design tokens
+│   │   ├── lib/              # ApiClient wrapper around axios (browser side), session.js (server-side session)
+│   │   ├── middleware.js     # route gating + token refresh (Edge runtime)
+│   │   ├── server/           # the API/data layer, Node-only — imported only by route handlers, never client code
+│   │   │   ├── config/       # env, permissions
+│   │   │   ├── db/           # thin re-export of DrizzleClient, schema.js, relations.js, migrations/
+│   │   │   ├── services/     # business logic and transactions — the only layer route handlers call
+│   │   │   ├── repositories/ # data-access modules on top of Drizzle
+│   │   │   ├── validators/   # zod schemas
+│   │   │   ├── utils/        # errors, money, pagination, apiResponse, bookingNumber
+│   │   │   ├── jobs/         # background jobs (hold-expiry sweeper)
+│   │   │   ├── integrations/ # pluggable email/sms/whatsapp/payment providers
+│   │   │   ├── notifications/# notification fan-out service
+│   │   │   ├── lib/          # wrapper classes around every external npm library (DrizzleClient, BcryptHasher, JwtService, RedisClient, ...)
+│   │   │   └── seeds/        # database seed script
+│   │   └── tests/            # Vitest suites: component tests + api/ route-handler integration tests, helpers/ (callRoute.js, fixtures.js)
+│   ├── instrumentation.js    # Next's startup hook — starts the hold-expiry sweeper (replaces the old server.js)
+│   ├── public/                # favicon and other static assets
 │   ├── Dockerfile
 │   └── package.json
 │
-├── frontend/                # Next.js (App Router) app
-│   ├── src/
-│   │   ├── components/     # reusable UI primitives
-│   │   ├── layouts/        # admin shell, customer shell
-│   │   ├── pages/          # route-level pages, grouped admin/ + customer/ + auth/
-│   │   ├── app/            # App Router route tree (layouts + page.jsx)
-│   │   ├── views/          # page components the routes render
-│   │   ├── services/       # API call modules (one per resource)
-│   │   ├── lib/session.js  # server-side session (reads the auth cookie)
-│   │   ├── middleware.js   # route gating + token refresh at the edge
-│   │   ├── contexts/       # AuthProvider + useAuth()
-│   │   ├── hooks/          # useResourceList, usePermission, usePagination, useDebounce
-│   │   ├── constants/      # nav config, select options
-│   │   ├── utils/          # formatting helpers
-│   │   ├── styles/         # global CSS + design tokens
-│   │   ├── tests/          # Vitest suites, shared render helper + fixtures
-│   │   ├── lib/            # ApiClient wrapper around axios
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── public/             # favicon and other static assets
-│   ├── Dockerfile
-│   └── package.json
-│
-├── .github/
-│   ├── workflows/main.yml   # test -> build -> deploy to EC2, the only workflow
-│   └── scripts/smoke.sh     # end-to-end checks, run by `make smoke`
-├── documentation/           # architecture, database, api, booking-flow, development, deployment
-├── docker-compose.yml
-├── pgadmin.servers.json     # pgAdmin's pre-registered dev database connection
-├── Makefile                 # command runner for everything above (`make help`)
+├── scripts/
+│   └── smoke.sh              # end-to-end checks, run by `make smoke`
+├── documentation/            # architecture, database, api, booking-flow, development, deployment
+├── docker-compose.yml        # single `app` service + postgres/redis/pgadmin/mailpit
+├── pgadmin.servers.json      # pgAdmin's pre-registered dev database connection
+├── Makefile                  # command runner for everything above (`make help`)
 └── .gitignore
 ```
 
-Note: the top-level application folders are lowercase `backend/` and `frontend/` (not the capitalized `Backend/`/`Frontend/` sometimes seen in project templates) — an intentional, explicit choice to match standard Node/JS ecosystem convention and every import path, Docker build context, and CI working directory in this repo.
+Note: the top-level application folder is lowercase `nextapp/` (not a capitalized `Nextapp/` sometimes seen in project templates) — an intentional, explicit choice to match standard Node/JS ecosystem convention and every import path, Docker build context, and CI working directory in this repo.
 
 ## Quick start
 
@@ -79,19 +65,18 @@ Note: the top-level application folders are lowercase `backend/` and `frontend/`
 make setup
 ```
 
-That copies both `.env` files from their `.env.example` templates, builds the
-images, starts the stack, waits for every service to report healthy, and seeds
+That copies the `.env` file from its `.env.example` template, builds the
+image, starts the stack, waits for every service to report healthy, and seeds
 demo data. The equivalent by hand:
 
 ```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
+cp nextapp/.env.example nextapp/.env
 
 docker compose up --build
-docker compose exec backend npm run seed
+docker compose exec app npm run seed
 ```
 
-Database migrations run automatically when the backend container starts (`npm run db:migrate`, part of its Compose start command).
+Database migrations run automatically when the `app` container starts (`npm run db:migrate`, part of its Compose start command).
 
 ### Common commands
 
@@ -104,10 +89,10 @@ Database migrations run automatically when the backend container starts (`npm ru
 | `make logs` | follow logs from all services |
 | `make seed` | load demo data (idempotent) |
 | `make migrate` / `make migrate-new name=add_x` | apply / create migrations |
-| `make test` / `make lint` | both test suites / both linters |
+| `make test` / `make lint` | run tests / lint the app |
 | `make smoke` | end-to-end checks against the running stack |
-| `make psql` / `make sh-backend` | database shell / container shell |
-| `make build` | build the production Docker images |
+| `make psql` / `make sh` | database shell / container shell |
+| `make build` | build the production Docker image |
 | `make clean` | remove containers **and** database volumes |
 
 Full setup, testing, linting, pgAdmin and Drizzle Studio instructions are in [`documentation/development.md`](documentation/development.md).
@@ -116,12 +101,11 @@ Full setup, testing, linting, pgAdmin and Drizzle Studio instructions are in [`d
 
 | What | URL |
 |---|---|
-| Frontend (customer site) | http://localhost:5173 |
+| App (customer site) | http://localhost:5173 |
 | Admin console | http://localhost:5173/admin |
 | Sign in (staff + customers) | http://localhost:5173/login |
-| Backend API | http://localhost:4000/api/v1 |
-| API docs (Swagger UI, dev only) | http://localhost:4000/api-docs |
-| Health check | http://localhost:4000/api/v1/health |
+| API | http://localhost:5173/api/v1 |
+| Health check | http://localhost:5173/api/v1/health |
 | pgAdmin (dev only) | http://localhost:5050 |
 | Mailpit inbox (dev only) | http://localhost:8026 |
 
@@ -136,7 +120,7 @@ Full setup, testing, linting, pgAdmin and Drizzle Studio instructions are in [`d
 
 ## Documentation
 
-- [`documentation/architecture.md`](documentation/architecture.md) — system design, layered backend architecture, the `lib/` wrapper convention, RBAC model, provider abstractions.
+- [`documentation/architecture.md`](documentation/architecture.md) — system design, the service/repository layering, the `lib/` wrapper convention, RBAC model, provider abstractions.
 - [`documentation/database.md`](documentation/database.md) — schema by domain, the booking overlap-prevention design, soft deletion, money handling, migrations.
 - [`documentation/api.md`](documentation/api.md) — REST conventions, auth flow, full route map.
 - [`documentation/booking-flow.md`](documentation/booking-flow.md) — the complete booking lifecycle, the concurrency/double-booking guarantee, and pricing.
@@ -147,10 +131,11 @@ Full setup, testing, linting, pgAdmin and Drizzle Studio instructions are in [`d
 
 This project is under active, incremental development across several concurrent workstreams. As of this writing:
 
-- **Backend API**: every resource module under `backend/src/routes/` (auth, users, roles, hotels, room types, rooms, amenities, rate plans, availability, bookings, customers, services, payments, refunds, invoices, destinations, tours, transport, commissions, reports, dashboard, notifications, settings, uploads) has real controller/service implementations — none are placeholder stubs. Booking creation accepts either a specific `roomId` or a `roomTypeId` (the server auto-assigns and locks an available room of that type — what the customer-facing checkout uses, since customers are never shown raw room numbers), and every list/detail/payment/invoice endpoint a `Customer`-role user can reach is scoped to their own records server-side. See `documentation/api.md` for the full route table.
-- **Automated tests**: the backend has 68 passing tests (`backend/tests/unit` + `backend/tests/integration`, run with `make test-backend`) covering auth, RBAC/permission checks, hotel CRUD, availability search, the full booking lifecycle (creation, cancellation-fee tiers, check-in/out), payments, invoices, refunds, and — the single most critical scenario in the brief — concurrent double-booking prevention, verified by firing real simultaneous requests against the same room and the same room type and asserting exactly the right number succeed. The frontend has 84 passing Vitest + Testing Library tests (`frontend/src/tests`, run with `make test-frontend`) covering login, the auth and permission gates, hotel search, hotel details, room selection, the five-step checkout (including the exact payload it POSTs and the payment/booking failure paths) and the booking confirmation page.
-- **Frontend UI**: the React application has a full admin console (`/admin/*` — dashboard, bookings, hotels, rooms/room-types/rate-plans, customers, tours, destinations, transport, payments, invoices, commissions, reports, users, roles & permissions, settings) and the complete customer-facing flow (home search, hotel details + room selection, multi-step checkout with guest info/room summary/additional services/price summary/payment, booking confirmation, my bookings, my invoices, profile) plus the extra-services catalog (`/admin/services`) and auth pages (login, register, forgot/reset password), all built on a shared reusable UI kit (`frontend/src/components/ui/`).
-- **SMS / WhatsApp notifications**: the provider abstraction exists (`backend/src/integrations/sms/`, `backend/src/integrations/whatsapp/`) and is wired into the notification fan-out service, with two providers each: `none` (channel disabled — the default) and `console` (development provider that logs the message). No real gateway is implemented yet; adding Twilio, the Meta Cloud API or a local Bangladesh gateway means one `case` plus a provider factory in that one file.
+- **API**: every resource domain under `nextapp/src/app/api/v1/` (auth, users, roles, hotels, room types, rooms, amenities, rate plans, availability, bookings, customers, services, payments, refunds, invoices, destinations, tours, transport, commissions, reports, dashboard, notifications, settings, uploads, activity-logs, health) has real route-handler + service implementations — none are placeholder stubs. Booking creation accepts either a specific `roomId` or a `roomTypeId` (the server auto-assigns and locks an available room of that type — what the customer-facing checkout uses, since customers are never shown raw room numbers), and every list/detail/payment/invoice endpoint a `Customer`-role user can reach is scoped to their own records server-side. See `documentation/api.md` for the full route table.
+- **Automated tests**: `nextapp/src/tests/` has 160 passing Vitest tests (run with `make test`), including component tests plus route-handler integration tests under `src/tests/api/` (using the shared `callRoute.js` helper to invoke route handlers directly) covering auth, hotels, users, RBAC, amenities/services, rate plans, bookings, booking concurrency, and payments/invoices — including, per the brief's single most critical scenario, concurrent double-booking prevention verified by firing real simultaneous requests against the same room and the same room type and asserting exactly the right number succeed. Route-level test coverage was **not** added for the tours/transport/destinations/refunds/reports/invoices-pdf/uploads domains — they still have only whatever pre-existing component-level coverage they had, if any; this is a known gap, not a covered area.
+- **UI**: the application has a full admin console (`/admin/*` — dashboard, bookings, hotels, rooms/room-types/rate-plans, customers, tours, destinations, transport, payments, invoices, commissions, reports, users, roles & permissions, settings) and the complete customer-facing flow (home search, hotel details + room selection, multi-step checkout with guest info/room summary/additional services/price summary/payment, booking confirmation, my bookings, my invoices, profile) plus the extra-services catalog (`/admin/services`) and auth pages (login, register, forgot/reset password), all built on a shared reusable UI kit (`nextapp/src/components/ui/`).
+- **SMS / WhatsApp notifications**: the provider abstraction exists (`nextapp/src/server/integrations/sms/`, `nextapp/src/server/integrations/whatsapp/`) and is wired into the notification fan-out service, with two providers each: `none` (channel disabled — the default) and `console` (development provider that logs the message). No real gateway is implemented yet; adding Twilio, the Meta Cloud API or a local Bangladesh gateway means one `case` plus a provider factory in that one file.
 - **Payment gateways**: five adapters, each its own class extending `PaymentGateway` — `mock` (default, always succeeds, no credentials), `stripe` (cards, charged server-side in one call), and the buyer-approved wallets `paypal`, `bkash` and `nagad`. Sandbox credentials come from env constants and every provider defaults to its sandbox host; a gateway with missing credentials is refused at resolve time with a message naming the absent variable. Only `mock` is exercised end to end in CI — the live adapters are unit-tested against mocked transports, not against the providers' sandboxes.
 
 This section reflects the state of the repository at the time it was last updated — check the codebase directly for anything that may have since changed.
+</content>
