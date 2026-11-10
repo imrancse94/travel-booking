@@ -65,6 +65,39 @@ describe('payments and invoices', () => {
     expect(pay.body.data.bookingId ?? pay.body.data.booking?.id).toBeTruthy();
   });
 
+  it('accepts the booking total exactly as the checkout sends it: a decimal string', async () => {
+    // The booking API returns totalAmount as a string ("160.00") and the checkout passes
+    // it straight back. Every other test wraps it in Number(), which hid a bug where this
+    // was rejected with "Validation failed" and no checkout payment could succeed.
+    const { hotel, roomType } = await createBookableHotel({ price: 80 });
+    const booking = await createHeldBooking(customerAToken, { hotelId: hotel.id, roomTypeId: roomType.id });
+    expect(typeof booking.totalAmount).toBe('string');
+
+    const pay = await callRoute(createPayment, {
+      method: 'POST',
+      path: '/api/v1/payments',
+      headers: bearer(customerAToken),
+      body: { bookingId: booking.id, amount: booking.totalAmount, method: 'card', gateway: 'mock' },
+    });
+
+    expect(pay.status).toBe(201);
+    expect(pay.body.data.status).toBe('paid');
+  });
+
+  it('still rejects a non-numeric or non-positive amount', async () => {
+    const { hotel, roomType } = await createBookableHotel({ price: 80 });
+    const booking = await createHeldBooking(customerAToken, { hotelId: hotel.id, roomTypeId: roomType.id });
+    for (const amount of ['abc', 0, '-5', '']) {
+      const pay = await callRoute(createPayment, {
+        method: 'POST',
+        path: '/api/v1/payments',
+        headers: bearer(customerAToken),
+        body: { bookingId: booking.id, amount, method: 'card', gateway: 'mock' },
+      });
+      expect(pay.status, `amount ${JSON.stringify(amount)}`).toBe(422);
+    }
+  });
+
   it("blocks a customer from paying toward another customer's booking (404, not 403 -- doesn't confirm it exists)", async () => {
     const { hotel, roomType } = await createBookableHotel({ price: 80 });
     const booking = await createHeldBooking(customerAToken, { hotelId: hotel.id, roomTypeId: roomType.id });

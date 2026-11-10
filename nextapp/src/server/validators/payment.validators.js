@@ -2,7 +2,10 @@ import { z } from 'zod';
 
 export const createPaymentSchema = z.object({
   bookingId: z.string().uuid(),
-  amount: z.number().positive(),
+  // coerce: bookings report totalAmount as a decimal STRING ("205.00", straight from a
+  // Postgres numeric), and the checkout sends it back unchanged. A strict z.number() rejected
+  // that with "Validation failed", so no checkout payment could ever succeed.
+  amount: z.coerce.number().positive(),
   method: z.enum(['cash', 'bank_transfer', 'card', 'mobile_banking', 'online_gateway']),
   gateway: z.enum(['mock', 'stripe', 'paypal', 'bkash', 'nagad']).optional(),
   metadata: z.record(z.any()).optional(),
